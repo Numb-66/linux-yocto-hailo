@@ -21,3 +21,37 @@
         full-duplex;
     };
 };
+
+&pinctrl {
+    pinctrl_uart0_rxd: uart0_rxd {
+        function = "uart0_rxd_in";
+        groups = "uart0_rxd_in_0_grp";
+    };
+
+    pinctrl_uart0_txd: uart0_txd {
+        function = "uart0_txd_out";
+        groups = "uart0_txd_out_0_grp";
+    };
+
+    pinctrl_uart1_rxd: uart1_rxd {
+        function = "uart1_rxd_in";
+        groups = "uart1_rxd_in_0_grp";
+    };
+
+    pinctrl_uart1_txd: uart1_txd {
+        function = "uart1_txd_out";
+        groups = "uart1_txd_out_0_grp";
+    };
+};
+
+&serial0 {
+    status = "okay";
+    pinctrl-names = "default";
+    pinctrl-0 = <&pinctrl_uart0_txd>, <&pinctrl_uart0_rxd>;
+};
+
+&serial1 {
+    status = "okay";
+    pinctrl-names = "default";
+    pinctrl-0 = <&pinctrl_uart1_txd>, <&pinctrl_uart1_rxd>;
+};

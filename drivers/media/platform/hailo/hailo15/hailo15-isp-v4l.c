@@ -87,6 +87,7 @@ extern void hailo15_isp_handle_afm_int(struct work_struct *);
 extern int hailo15_isp_dma_set_enable(struct hailo15_isp_device *, int, int);
 extern void hailo15_fe_get_dev(struct vvcam_fe_dev** dev);
 extern void hailo15_fe_set_address_space_base(struct vvcam_fe_dev* fe_dev,void* base);
+void frame_timeout_handler(struct timer_list *t); // forward declaration
 
 struct hailo15_af_kevent af_kevent;
 EXPORT_SYMBOL(af_kevent);
@@ -676,6 +677,10 @@ static int hailo15_isp_s_stream(struct v4l2_subdev *sd, int enable)
 			pr_warn("%s - start stream event failed with %d\n", __func__, ret);
 			return ret;
 		}
+		timer_setup(&isp_dev->frame_timer, frame_timeout_handler, 0);
+		if(mod_timer(&isp_dev->frame_timer, jiffies + msecs_to_jiffies(FRAME_TIMEOUT_MS))){
+			pr_warn("frame timer was pending after setup\n");
+		}
 	}
 	if(!isp_dev->rdma_enable){
 		pad = &isp_dev->pads[HAILO15_ISP_SINK_PAD_S0];
@@ -694,6 +699,9 @@ static int hailo15_isp_s_stream(struct v4l2_subdev *sd, int enable)
 		path = VID_GRP_TO_ISP_PATH(sd->grp_id);
 		if (path < 0 || path >= ISP_MAX_PATH)
 			return -EINVAL;
+
+		del_timer_sync(&isp_dev->frame_timer);
+
 		if(path == ISP_MCM_IN){
 			isp_dev->rdma_enable = 0;
 			isp_dev->dma_ready = 0;
@@ -1611,7 +1619,7 @@ static int hailo15_process_sensor_dataloss_stat_sub(
     uint32_t sensor_index = 0;
     
     for (sensor_index = 0; sensor_index < ISP_MIS_SENSORS_COUNT; sensor_index++) {
-        uint32_t sensor_dataloss_mask = ISP_MIS_SENSOR_DATALOSS_FIRST_BIT << sensor_index;
+        uint32_t sensor_dataloss_mask = ISP_MIS_SENSOR_DATALOSS_LAST_BIT >> sensor_index;
         ret |= hailo15_process_pad_stat_sub(
             isp_dev, pad, mis_reg, HAILO15_UEVENT_SENSOR_DATALOSS_STAT,
             sensor_dataloss_mask, &sensor_index, sizeof(sensor_index));
@@ -1643,8 +1651,6 @@ static int hailo15_isp_irq_stat_process(struct hailo15_isp_device *isp_dev,
                 HAILO15_UEVENT_ISP_AFM_STAT, ISP_MIS_AFM_FIN_MASK);
             ret |= hailo15_process_isp_pad_stat_sub(isp_dev, pad, mis,
                 HAILO15_UEVENT_VSM_DONE_STAT, ISP_MIS_VSM_DONE);
-
-            ret |= hailo15_process_sensor_dataloss_stat_sub(isp_dev, pad, mis);
         }
     } else if (id == HAILO15_ISP_IRQ_EVENT_MI_MIS) {
         for (pad = 0; pad < HAILO15_ISP_PADS_NR; pad++) {
@@ -1677,6 +1683,34 @@ irqreturn_t hailo15_process_irq_stats_events(struct hailo15_isp_device *isp_dev,
     }
 
     return IRQ_HANDLED;
+}
+
+void frame_timeout_handler(struct timer_list *t) {
+	struct hailo15_isp_device *isp_dev = from_timer(isp_dev, t, frame_timer);
+	uint32_t sensor_mask = 0;
+	int pad;
+	if (!isp_dev) {
+		pr_err("%s - no device\n", __func__);
+		return;
+	}
+	if (!atomic_read(&isp_dev->frame_received)) {
+		pr_warn("%s - no frame received, possible disconnection\n", __func__);
+
+		// Send dataloss stat for all sensors - only subscribed sensors will be processed
+		for (pad = HAILO15_ISP_SINK_PAD_MAX; pad < HAILO15_ISP_SOURCE_PAD_MAX; ++pad) {
+
+			// match the sensor mask to the pad - assumes the first pad is sensor 0 and so on
+			sensor_mask = ISP_MIS_SENSOR_DATALOSS_LAST_BIT >> (pad - HAILO15_ISP_SINK_PAD_MAX);
+			if(hailo15_process_sensor_dataloss_stat_sub(isp_dev, pad, sensor_mask)) {
+				pr_err("%s - failed to send dataloss stat for pad %d and sensor mask 0x%x\n",
+				__func__, pad, sensor_mask);
+			}
+		}
+	}
+	// Reset frame_received for the next interval
+	atomic_set(&isp_dev->frame_received, 0);
+
+	mod_timer(&isp_dev->frame_timer, jiffies + msecs_to_jiffies(FRAME_TIMEOUT_MS));
 }
 
 

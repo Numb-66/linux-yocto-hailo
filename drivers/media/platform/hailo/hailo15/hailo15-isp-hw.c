@@ -365,6 +365,10 @@ static void hailo15_isp_handle_frame_rx_rdma(struct hailo15_isp_device *isp_dev,
 	if(__hailo15_isp_frame_rx_mp(irq_status) || __hailo15_isp_frame_rx_sp2(irq_status)){
 		isp_dev->frame_end = 1;
 	}
+	if(isp_dev->frame_end){
+		atomic_set(&isp_dev->frame_received, 1);
+		mod_timer(&isp_dev->frame_timer, jiffies + msecs_to_jiffies(FRAME_TIMEOUT_MS));
+	}
 	if(isp_dev->frame_end && isp_dev->dma_ready &&  (!isp_dev->fe_enable || isp_dev->fe_ready)){
 		/* do rx_rdma */
 		hailo15_isp_buffer_done(isp_dev, ISP_MCM_IN);
@@ -383,6 +387,9 @@ static void hailo15_isp_handle_frame_rx_mp(struct hailo15_isp_device *isp_dev,
 	if (isp_dev->mi_stopped[ISP_MP] && !isp_dev->mcm_mode)
 		return;
 
+	atomic_set(&isp_dev->frame_received, 1);
+	mod_timer(&isp_dev->frame_timer, jiffies + msecs_to_jiffies(FRAME_TIMEOUT_MS));
+
 	/*do_rx_mp*/
 	hailo15_isp_buffer_done(isp_dev, ISP_MP);
 }
@@ -395,6 +402,9 @@ static void hailo15_isp_handle_frame_rx_sp2(struct hailo15_isp_device *isp_dev,
 
 	if (isp_dev->mi_stopped[ISP_SP2] && !isp_dev->mcm_mode)
 		return;
+
+	atomic_set(&isp_dev->frame_received, 1);
+	mod_timer(&isp_dev->frame_timer, jiffies + msecs_to_jiffies(FRAME_TIMEOUT_MS));
 
 	/*do_rx_sp2*/
 	hailo15_isp_buffer_done(isp_dev, ISP_SP2);

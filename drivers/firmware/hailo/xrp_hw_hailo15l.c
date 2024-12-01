@@ -58,7 +58,7 @@ static void open_interrupts_hailo15l(struct xvp *xvp)
 {
     dsp_config_writel(xvp, DSP_INT_FATAL_MASK, 0xFFFFFFFF);
     dsp_config_writel(xvp, DSP_INT_NONFATAL_MASK, 0xFFFFFFFF);
-    dsp_config_writel(xvp, DSP_IP_FAULT_MASK, 0xFFFFFFFF);
+    dsp_config_writel(xvp, DSP_IP_FAULT_MASK, 0xFFFFFFF7); /* mask wwdt heartbeat (bit 3) */
     dsp_config_writel(xvp, DSP_IP_SYSRAM_ERROR_INT_MASK, 0xFFFFFFFF);
     dsp_config_writel(xvp, DSP_ERR_INTERRUPT_MASK, 0xFFFFFFFF);
     dsp_config_writel(xvp, DSP_FAULT_MASK(0), 0xFFFFFFFF);

@@ -48,7 +48,6 @@
 
 &i2c_1 {
     gyro_lsm6dsr_1: lsm6dsr_1@6b {
-        status = "disabled";
         compatible = "st,lsm6dsr";
         reg = <0x6b>;
         vdd-supply = <&regulator_1p8v>;
@@ -95,9 +94,9 @@
     status = "okay";
 };
 
-&serial0 { 
- status = "okay"; 
-}; 
+&serial0 {
+ status = "okay";
+};
 
 &serial2 {
     status = "okay";

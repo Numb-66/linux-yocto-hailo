@@ -8,6 +8,7 @@
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <asm/neon-intrinsics.h>
+#include <linux/module.h>
 
 void neon_write_16B(const u8 *buf, volatile void __iomem *addr)
 {
@@ -20,3 +21,7 @@ void neon_write_32B(const u8 *buf, volatile void __iomem *addr)
 	vst4_u8((u8 *)addr, vld4_u8(buf));
 }
 EXPORT_SYMBOL_GPL(neon_write_32B);
+
+MODULE_AUTHOR("Hailo Technologies Ltd.");
+MODULE_DESCRIPTION("Neon utilities for spi-cadence-quadspi");
+MODULE_LICENSE("GPL v2");

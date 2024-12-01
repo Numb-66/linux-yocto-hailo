@@ -851,11 +851,11 @@ static const struct imx678_reg mode_4k_3dol_20fps_all_pixel[] = {
 	{ 0x3058, 0x4A }, /* SHR2[19:0] */
 	{ 0x3059, 0x00 },
 	/* 0x305A: Using default value */
-	{ 0x3060, 0x8e }, /* RHS1[19:0] */
-	{ 0x3061, 0x00 },
+	{ 0x3060, 0xF3 }, /* RHS1[19:0] */
+	{ 0x3061, 0x01 },
 	/* 0x3062: Using default value */
-	{ 0x3064, 0xa7 }, /* RHS2[19:0] */
-	{ 0x3065, 0x00 },
+	{ 0x3064, 0x30 }, /* RHS2[19:0] */
+	{ 0x3065, 0x02 },
 	/* 0x3066: Using default value */
 	/* 0x3069: Using default value (CHDR_GAIN_EN[7:0]) */
 	/* 0x306B: Using default value */
@@ -2639,8 +2639,8 @@ static const struct imx678_mode supported_hdr_modes[] = {
     .vblank = 90,  /*  */
     .vblank_min = 90,
     .vblank_max = 132840,
-	.rhs1 = 0x8e, /* change in registers */
-	.rhs2 = 0xa7, /* change in registers */
+	.rhs1 = 0x1F3, /* change in registers */
+	.rhs2 = 0x230, /* change in registers */
     .pclk = 594000000,
     .link_freq_idx = 0,
     .code = MEDIA_BUS_FMT_SRGGB12_3X12,

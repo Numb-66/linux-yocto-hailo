@@ -16,3 +16,4 @@ dtb-$(CONFIG_ARCH_HAILO15) += hailo15l-evb.dtb
 dtb-$(CONFIG_ARCH_HAILO15) += hailo15l-sbc.dtb
 dtb-$(CONFIG_ARCH_HAILO15) += hailo15-sbc.dtb
 dtb-$(CONFIG_ARCH_HAILO15) += hailo10-m2.dtb
+dtb-$(CONFIG_ARCH_HAILO15) += hailo15-sbc-gyro.dtbo

@@ -650,6 +650,8 @@
         interrupts = <GIC_SPI HW_INTERRUPTS__H265_INT_IRQ IRQ_TYPE_LEVEL_HIGH>;
         clocks = <&scmi_clk HAILO15_SCMI_CLOCK_IDX_H265_HCLK>, <&scmi_clk HAILO15_SCMI_CLOCK_IDX_H265_CLK>;
         clock-names = "hclk", "clk";
+        resets = <&scmi_reset HAILO15_SCMI_RESET_IDX_H265>;
+        reset-names = "h265-rst";
     };
 
     reserved_memory: reserved-memory {

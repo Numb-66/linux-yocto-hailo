@@ -9,6 +9,8 @@
 #include <linux/of.h>
 #include <linux/interrupt.h>
 #include <linux/workqueue.h>
+#include <linux/atomic.h>
+#include <linux/timer.h>
 #include "hailo15-events.h"
 #include "common.h"
 #include "fe/fe_dev.h"
@@ -20,6 +22,7 @@
 
 #define HAILO15_ISP_CHN_MAX 2 // S0/S1 - also called "port" in isp_mcm_buf
 #define HAILO15_ISP_PATHS_MAX 2 // MP/SP
+#define FRAME_TIMEOUT_MS 1100
 
 struct isp_mcm_buf {
 	uint32_t port; // channel
@@ -172,6 +175,8 @@ struct hailo15_isp_device {
 	spinlock_t miv2_mis_lock;
 	struct workqueue_struct* miv2_mis_wq;
 	struct work_struct miv2_mis_w;
+	struct timer_list frame_timer;
+	atomic_t frame_received;
 };
 
 

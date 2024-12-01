@@ -318,12 +318,3 @@
         cdns,ssc-mode = <TORRENT_SERDES_NO_SSC>;
     };
 };
-
-&cdns_usb3 {
-    dr_mode = "host";
-    phys = <&torrent_phy_usb3>;
-    phy-names = "cdns3,usb3-phy";
-    pinctrl-names = "default";
-    pinctrl-0 = <&pinctrl_usb_overcurrent_n_in>, <&pinctrl_usb_drive_vbus_out>;
-};
-

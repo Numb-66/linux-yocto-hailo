@@ -67,6 +67,9 @@
 
 #define ST_LSM6DSX_TS_SENSITIVITY		25000UL /* 25us */
 
+#define ST_LSM6DSX_REG_CTRL9_XL_ADDR	0x18
+#define ST_LSM6DSX_CTRL9_XL_I3C_DISABLE_MASK	BIT(0)
+
 static const struct iio_chan_spec st_lsm6dsx_acc_channels[] = {
 	ST_LSM6DSX_CHANNEL_ACC(IIO_ACCEL, 0x28, IIO_MOD_X, 0),
 	ST_LSM6DSX_CHANNEL_ACC(IIO_ACCEL, 0x2a, IIO_MOD_Y, 1),
@@ -1901,8 +1904,23 @@ static int st_lsm6dsx_reset_device(struct st_lsm6dsx_hw *hw)
 	 * line is asserted during hw reset the device will work in
 	 * I3C-only mode (if it is supported)
 	 */
-	err = st_lsm6dsx_flush_fifo(hw);
-	if (err < 0 && err != -ENOTSUPP)
+	err = st_lsm6dsx_set_fifo_mode(hw, ST_LSM6DSX_FIFO_BYPASS);
+	if (err < 0)
+		return err;
+
+	/* Wait fifo empty */
+	msleep(50);
+
+	/* Disable signals on INT1 */
+	reg = &hw->settings->irq_config.irq1;
+	err = regmap_update_bits(hw->regmap, reg->addr, reg->mask,	0);
+	if (err < 0)
+		return err;
+
+	/* Disable functional signal events on INT1 */
+	reg = &hw->settings->irq_config.irq1_func;
+	err = regmap_update_bits(hw->regmap, reg->addr, reg->mask,	0);
+	if (err < 0)
 		return err;
 
 	/* device sw reset */
@@ -1934,6 +1952,15 @@ static int st_lsm6dsx_init_device(struct st_lsm6dsx_hw *hw)
 	err = st_lsm6dsx_reset_device(hw);
 	if (err < 0)
 		return err;
+
+#ifndef CONFIG_IIO_ST_LSM6DSX_I3C
+	/* Disable MIPI I3C interface */
+	err = regmap_update_bits(hw->regmap, ST_LSM6DSX_REG_CTRL9_XL_ADDR, 
+			ST_LSM6DSX_CTRL9_XL_I3C_DISABLE_MASK, 
+			ST_LSM6DSX_SHIFT_VAL(1, ST_LSM6DSX_CTRL9_XL_I3C_DISABLE_MASK));
+	if (err < 0)
+		return err;
+#endif
 
 	/* enable Block Data Update */
 	reg = &hw->settings->bdu;

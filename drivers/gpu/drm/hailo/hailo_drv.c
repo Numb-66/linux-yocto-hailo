@@ -361,3 +361,7 @@ static void __exit hailo_drm_exit(void)
 	platform_driver_unregister(&hailo_drm_driver);
 }
 module_exit(hailo_drm_exit);
+
+MODULE_AUTHOR("Hailo Technologies Ltd.");
+MODULE_DESCRIPTION("Hailo DRM Driver");
+MODULE_LICENSE("GPL v2");

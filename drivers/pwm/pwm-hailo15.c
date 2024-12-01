@@ -420,3 +420,7 @@ static struct platform_driver hailo15_pwm_driver = {
 	},
 };
 module_platform_driver(hailo15_pwm_driver);
+
+MODULE_AUTHOR("Hailo Technologies Ltd.");
+MODULE_DESCRIPTION("Hailo15 PWM driver");
+MODULE_LICENSE("GPL v2");

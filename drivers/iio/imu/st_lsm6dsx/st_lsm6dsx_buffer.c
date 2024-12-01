@@ -184,7 +184,7 @@ static int st_lsm6dsx_update_decimators(struct st_lsm6dsx_hw *hw)
 	return err;
 }
 
-static int st_lsm6dsx_set_fifo_mode(struct st_lsm6dsx_hw *hw,
+int st_lsm6dsx_set_fifo_mode(struct st_lsm6dsx_hw *hw,
 				    enum st_lsm6dsx_fifo_mode fifo_mode)
 {
 	unsigned int data;

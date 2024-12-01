@@ -145,12 +145,7 @@ config ARCH_LG1K
 config ARCH_HAILO15
 	bool "Hailo-15 SoC"
 	select ARM_PL320_MBOX
-	select MMC_SDHCI_OF_DWCMSHC
-	select MMC_HAILO_SDHCI_DWCMSHC
-	select MMC_HAILO_SDHCI_DWCMSHC_DMA
 	select ARCH_DMA_ADDR_T_64BIT
-	select EDAC_SUPPORT
-	select EDAC_HAILO15_CDNS
 	help
 	  This enables support for the Hailo-15 ARMv8 SoC.
 
