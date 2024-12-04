@@ -1,0 +1,375 @@
+// SPDX-License-Identifier:     GPL-2.0
+/*
+ * Copyright (c) 2019-2023 Hailo Technologies Ltd. All rights reserved.
+ */
+
+/dts-v1/;
+#include "../hailo/hailo15-base.dtsi"
+#include <dt-bindings/gpio/gpio.h>
+
+/ {
+    memory {
+        device_type = "memory";
+        reg = <0x00000000 0x80000000 0x00000001 0x00000000>;
+    };
+};
+
+&i2c_0 {
+    status = "ok";
+    imx678: camera-sensor@1a {
+        status = "ok";
+        compatible = "sony,imx678";
+        reg = <0x1a>;
+        clocks = <&sensor_clk>;
+        clock-names = "inclk";
+        clock-frequency = <24000000>;
+        csi-id = <0>;
+        reset-gpios = <&gpio1 4 GPIO_ACTIVE_HIGH>;
+        xmaster-gpios = <&gpio0 3 GPIO_ACTIVE_HIGH>;
+        port {
+            sensor_out_csi2rx: endpoint {
+                data-lanes = <1 2 3 4>;
+                remote-endpoint = <&csi2rx_in_sensor>;
+		        link-frequencies = /bits/ 64 <891000000 1440000000 1782000000>;
+            };
+        };
+     };
+};
+
+&i2c_1 {
+    status = "ok";
+    // ina231_1v8: 1v8@40 {
+    //     compatible = "ti,ina231_precise";
+    //     reg = <0x40>;
+    //     shunt-resistor = <100000>;
+    //     max-current = <260>;
+    // };
+    // ina231_DDR_VDDQX: DDR_VDDQX@42 {
+    //     compatible = "ti,ina231_precise";
+    //     reg = <0x42>;
+    //     shunt-resistor = <100000>;
+    //     max-current = <170>;
+    // };
+    // ina231_0v8: 0v8@43 {
+    //     compatible = "ti,ina231_precise";
+    //     reg = <0x43>;
+    //     shunt-resistor = <1000>;
+    //     max-current = <11755>;
+    // };
+
+    // tmp175_NEAR_H15_SOC: NEAR_H15_SOC@2c {
+    //     compatible = "ti,tmp175";
+    //     reg = <0x2c>;
+    // };
+
+    codec_tlv320aic3104: tlv320aic3104@18 {
+        #sound-dai-cells = <0>;
+        compatible = "ti,tlv320aic3104";
+        reg = <0x18>;
+        ai3x-source-clk = "bclk";
+        ai3x-micbias-vg = <2>;
+		/* Regulators */
+		AVDD-supply = <&regulator_3p3v>;
+		IOVDD-supply = <&regulator_1p8v>;
+		DRVDD-supply = <&regulator_3p3v>;
+		DVDD-supply = <&regulator_1p8v>;
+    };
+};
+
+&csi2rx0 {
+    status = "ok";
+    ports {
+        port@0 {
+            csi2rx_in_sensor: endpoint {
+                remote-endpoint = <&sensor_out_csi2rx>;
+            };
+        };
+    };
+};
+
+&vision_subsys {
+    status = "okay";
+};
+
+&csi2rx1 {
+    status = "ok";
+};
+
+&hailo_vid_cap {
+    status = "ok";
+};
+
+&hailo_isp {
+    status = "ok";
+};
+
+&hailo_pixel_mux {
+    status = "ok";
+};
+
+&rxwrapper0 {
+    status = "ok";
+};
+
+&hailo_vc8000e {
+    status = "ok";
+};
+
+&vc8000e_reserved {
+    status = "ok";
+};
+
+&xrp {
+    status = "okay";
+};
+
+&xrp_reserved {
+    status = "okay";
+};
+
+&sdio0 {
+    status = "ok";
+    broken-cd;
+    sdhci-caps= <0 0x01000000>; // Force VOLT33 capability
+    phy-config {
+		card-is-emmc = <0x0>;
+		cmd-pad-values = <0x1 0x3 0x1 0x1>; // txslew_ctrl_n, txslew_ctrl_p, weakpull_enable, rxsel
+        	dat-pad-values = <0x1 0x3 0x1 0x1>; // txslew_ctrl_n, txslew_ctrl_p, weakpull_enable, rxsel
+        	rst-pad-values = <0x1 0x3 0x1 0x1>; // txslew_ctrl_n, txslew_ctrl_p, weakpull_enable, rxsel
+        	clk-pad-values = <0x1 0x3 0x0 0x1>; // txslew_ctrl_n, txslew_ctrl_p, weakpull_enable, rxsel
+        	sdclkdl-cnfg = <0x0 0x32>; //extdly_en, cckdl_dc
+        	drive-strength = <0xC 0xC>; //pad_sp, pad_sn	
+    };
+};
+&sdio1 {
+    status = "ok";
+    non-removable;
+    phy-config {
+		card-is-emmc = <0x1>;
+        	cmd-pad-values = <0x2 0x2 0x1 0x1>; // txslew_ctrl_n, txslew_ctrl_p, weakpull_enable, rxsel
+        	dat-pad-values = <0x2 0x2 0x1 0x1>; // txslew_ctrl_n, txslew_ctrl_p, weakpull_enable, rxsel
+        	rst-pad-values = <0x2 0x2 0x1 0x1>; // txslew_ctrl_n, txslew_ctrl_p, weakpull_enable, rxsel
+        	clk-pad-values = <0x2 0x2 0x0 0x0>; // txslew_ctrl_n, txslew_ctrl_p, weakpull_enable, rxsel
+        	sdclkdl-cnfg = <0x0 0x32>; //extdly_en, cckdl_dc
+        	drive-strength = <0xC 0xC>; //pad_sp, pad_sn
+        };
+};
+
+&eth {
+    status = "ok";
+    pinctrl-names = "default";
+    pinctrl-0 = <&pinctrl_eth>;
+    phy-mode = "rmii";
+};
+
+&qspi {
+    status = "ok";
+
+    spi0_flash0: flash@0 {
+        /* values for MT25QU01G */
+        spi-max-frequency = <6250000>; /* 90Mhz in DTR, 166Mhz in STR */
+        cdns,read-delay = <7>;
+        cdns,tshsl-ns = <30>;
+        cdns,tsd2d-ns = <30>;
+        cdns,tchsh-ns = <5>;
+        cdns,tslch-ns = <3>;
+    };
+};
+
+&hailo_usb3 {
+    status = "okay";
+    disconnected-overcurrent;
+};
+
+&cdns_usb3 {
+    dr_mode = "host";
+    maximum-speed = "high-speed";
+};
+
+
+&i2s_cpu_master {
+    status = "okay";
+    rx-sample-pace-pattern-repetitions = <2>;
+    rx-sample-pace = <64 64 64>;
+    rx-sample-cmp-to = "prev-val";
+    tx-sample-offset = <81>;
+    tx-sample-pace = <63>;
+};
+
+&audio_card_master {
+    status = "ok";
+    simple-audio-card,bitclock-master = <&cpu_dai_master>;
+    simple-audio-card,frame-master = <&cpu_dai_master>;
+
+    cpu_dai_master: simple-audio-card,cpu {
+        sound-dai = <&i2s_cpu_master>;
+        system-clock-frequency = <1562500>;
+        system-clock-direction-out;
+    };
+    codec_dai_master: simple-audio-card,codec {
+        sound-dai = <&codec_tlv320aic3104>;
+        system-clock-frequency = <1562500>;
+    };
+};
+
+&audio_card_slave_tx {
+    simple-audio-card,bitclock-master = <&codec_dai_tx>;
+    simple-audio-card,frame-master = <&codec_dai_tx>;
+
+    cpu_dai_tx: simple-audio-card,cpu {
+        sound-dai = <&i2s_cpu_slave_tx>;
+        system-clock-frequency = <12288000>;
+    };
+    codec_dai_tx: simple-audio-card,codec {
+        sound-dai = <&codec_tlv320aic3104>;
+        system-clock-frequency = <12288000>;
+    };
+};
+
+&audio_card_slave_rx {
+    simple-audio-card,bitclock-master = <&codec_dai_rx>;
+    simple-audio-card,frame-master = <&codec_dai_rx>;
+
+    cpu_dai_rx: simple-audio-card,cpu {
+        sound-dai = <&i2s_cpu_slave_rx>;
+        system-clock-frequency = <12288000>;
+    };
+    codec_dai_rx: simple-audio-card,codec {
+        sound-dai = <&codec_tlv320aic3104>;
+        system-clock-frequency = <12288000>;
+    };
+};
+
+/ {
+    sensor_clk: sensor_clk {
+        compatible = "fixed-clock";
+        #clock-cells = <0>;
+        clock-frequency = <24000000>;
+    };
+};
+
+&sdio0_reserved {
+    status = "ok";
+};
+
+&serial0 { 
+ status = "ok"; 
+};
+
+&serial2 {
+    status = "ok";
+    pinctrl-names = "default";
+    pinctrl-0 = <&pinctrl_uart2>;
+};
+
+&serial3 {
+    status = "ok";
+    pinctrl-names = "default";
+    pinctrl-0 = <&pinctrl_uart3>;
+};
+
+&pinctrl {
+
+    pinctrl_eth: eth {
+        pins = "eth_rgmii_tx_clk",
+               "eth_rgmii_tx_ctl",
+               "eth_rgmii_txd_0",
+               "eth_rgmii_txd_1",
+               "eth_rgmii_txd_2",
+               "eth_rgmii_txd_3";
+        drive-strength = <2>;
+    };
+
+    pinctrl_uart2: uart2 {
+        function = "uart2";
+        groups = "uart2_2_grp";	
+    };
+
+    pinctrl_uart3: uart3 { 
+        function = "uart3";
+        groups = "uart3_2_grp";
+    };
+
+};
+
+&gpio0 {
+    gpio-ranges = <&pinctrl 0 0 16>;
+
+    gpio-line-names =
+        "NC",
+        "NC",
+        "NC",
+        "NC",
+        "SEN_MCU_RX",
+        "MCU_ZB_RX",
+        "SEN_MCU_TX",
+        "MCU_ZB_TX",
+        "NC",
+        "SD_SEL",
+        "MCU_TCK",
+        "MCU_TDIO_RST_N",
+        "NC",
+        "ZIGBEE_RST_N",
+        "NC",
+        "NC";
+};
+
+&gpio1 {
+    gpio-ranges = <&pinctrl 0 16 16>;
+
+    gpio-line-names =
+        "IP_ID0",
+        "IP_ID1",
+        "AUD_RST_N",
+        "AUD_EN",
+        "SEN_RST_N",
+        "ETH_RST_N",
+        "NC",
+        "NR_ON_OFF",
+        "GYRO_INT_N",
+        "NC",
+        "NC",
+        "NC",
+        "NC",
+        "TCK_RTSn_SoC",
+        "TDIO_DTRn_SoC",
+        "NC";
+
+    audio_rst_n {
+
+        gpio-hog;
+
+        gpios = <2 GPIO_ACTIVE_HIGH>;
+
+        output-high;
+
+        line-name = "gpio_18";
+
+    };
+
+    eth_rst_n {
+
+        gpio-hog;
+
+        gpios = <5 GPIO_ACTIVE_HIGH>;
+
+        output-high;
+
+        line-name = "gpio_21";
+
+    };
+
+    //Temp solution to control the power of audio EN which is also used for ethernet power, this is is to prevent HW work around only.
+    aud_eth_power_n {
+
+        gpio-hog;
+
+        gpios = <3 GPIO_ACTIVE_HIGH>;
+
+        output-high;
+
+        line-name = "gpio_19";
+
+    };
+
+};

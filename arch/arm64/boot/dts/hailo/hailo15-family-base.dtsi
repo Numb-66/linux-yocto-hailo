@@ -1000,6 +1000,7 @@
         phy-mode = "rgmii-id";
     };
 
+
     regulator_3p3v: regulator-3p3v {
         compatible = "regulator-fixed";
         regulator-name = "regulator_3p3v";
