@@ -74,6 +74,7 @@
 #include "wb/wb/hailo15_isp_wb.h"
 #include "dci/dci/hailo15_isp_dci.h"
 #include "hdr/hailo15_isp_hdr.h"
+#include "general/hailo15_isp_general.h"
 
 int hailo15_isp_ctrl_init(struct hailo15_isp_device *isp_dev)
 {
@@ -99,6 +100,7 @@ int hailo15_isp_ctrl_init(struct hailo15_isp_device *isp_dev)
 	ctrl_count += hailo15_isp_dci_ctrl_count();
 	ctrl_count += hailo15_isp_afv1_ctrl_count();
 	ctrl_count += hailo15_isp_hdr_ctrl_count();
+	ctrl_count += hailo15_isp_general_ctrl_count();
 
 	pr_info("%s - calling v4l2_ctrl_handler_init with count %u\n", __func__,
 		ctrl_count);
@@ -124,6 +126,7 @@ int hailo15_isp_ctrl_init(struct hailo15_isp_device *isp_dev)
 	hailo15_isp_dci_ctrl_create(isp_dev);
 	hailo15_isp_afv1_ctrl_create(isp_dev);
 	hailo15_isp_hdr_ctrl_create(isp_dev);
+	hailo15_isp_general_ctrl_create(isp_dev);
 	isp_dev->sd.ctrl_handler = &isp_dev->ctrl_handler;
 
 	pr_info("%s - done\n", __func__);

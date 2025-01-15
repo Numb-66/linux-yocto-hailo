@@ -112,6 +112,15 @@ struct hailo15_miv2_mis {
 	struct list_head list;
 };
 
+struct isp_wrapper_config {
+    uint32_t fatal_asf_int_mask_offset;
+    uint32_t fatal_asf_int_mask_value;
+    uint32_t func_int_mask_offset;
+    uint32_t func_int_mask_value;
+    uint32_t err_int_mask_offset;
+    uint32_t err_int_mask_value;
+};
+
 struct hailo15_isp_device {
 	struct device *dev;
 	struct v4l2_subdev sd;
@@ -164,19 +173,24 @@ struct hailo15_isp_device {
 	int mcm_mode;
 	struct v4l2_subdev_format input_fmt;
 	struct list_head mcm_queue;
-	spinlock_t mcm_lock;
+	struct mutex mcm_lock;
 	int rdma_enable;
 	int dma_ready;
 	int frame_end;
 	int fe_ready;
 	int fe_enable;
+	int mcm_waiting;
+	int output_ready;
+	struct mutex ready_lock;
 	struct tasklet_struct fe_tasklet;
 	struct list_head miv2_mis_queue;
 	spinlock_t miv2_mis_lock;
 	struct workqueue_struct* miv2_mis_wq;
 	struct work_struct miv2_mis_w;
+	const struct isp_wrapper_config *wrapper_cfg;
 	struct timer_list frame_timer;
 	atomic_t frame_received;
+	atomic_t streaming_started;
 };
 
 

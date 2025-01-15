@@ -1879,9 +1879,9 @@ static int scmi_probe(struct platform_device *pdev)
 	 */
 	if (!of_property_read_u32(np, "fw-ver", &fw_ver)) {
 #ifdef CONFIG_ARCH_HAILO15
-		if (SCU_FW_BUILD_VERSION != handle->version->impl_ver) {
+		if (SCU_FW_SCMI_VERSION != handle->version->impl_ver) {
 			dev_err(dev, "Firmware version mismatch: linux(kernel)=0x%x, fw=0x%x\n",
-				 SCU_FW_BUILD_VERSION,
+				 SCU_FW_SCMI_VERSION,
 				 handle->version->impl_ver);
 			goto notification_exit;
 		}

@@ -37,8 +37,8 @@
 
 #define MCM_RETIMING0 0x1284
 #define MCM_RETIMING1 0x1288
-#define MCM_RETIMING_VSYNC 0x1e02ee0a
-#define MCM_RETIMING_HSYNC 0xe1001
+#define MCM_RETIMING_VSYNC 0x0A
+#define MCM_RETIMING_HSYNC 0x11E201
 
 /* isp ae mis and int mask */
 #define ISP_MIS_EXP_END_MASK 0x00040000
@@ -156,16 +156,6 @@ enum isp_mcm_mode {
 #define ISP_CTRL 0x400
 #define ISP_ENABLE BIT(0)
 #define ISP_CFG_UPD BIT(9)
-
-/* ISP wrapper specific registers */
-#define ISP_WRAPPER_FATAL_ASF_INT_MASK 0x4
-#define ISP_FUNC_INT_MASK 0x38
-#define ISP_ERR_INT_MASK 0x40
-
-/* ISP wrapper specific values */
-#define FATAL_ASF_INT_SET 0x1
-#define FUNC_INT_SET_ALL 0x7
-#define ERR_INT_SET_ALL 0x3ffff
 
 #define HAILO15_ISP_EVENT_IRQ (V4L2_EVENT_PRIVATE_START + 3000)
 

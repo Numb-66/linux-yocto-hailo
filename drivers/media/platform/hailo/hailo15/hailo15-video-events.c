@@ -124,8 +124,9 @@ int hailo15_video_post_event(struct video_device *vdev,
 
 		mutex_unlock(&event_resource->event_lock);
 	} else {
-		pr_debug("%s: event id: %d not subscribed\n", __func__,
+		pr_warn("%s: event id: %d not subscribed\n", __func__,
 			event_meta.event_id);
+		ret = -EINVAL;
 	}
 
 	return ret;

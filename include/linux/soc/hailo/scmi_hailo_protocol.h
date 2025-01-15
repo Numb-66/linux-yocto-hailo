@@ -31,6 +31,7 @@
 #define SCMI_HAILO_NOC_STOP_MEASURE_ID 8
 #define SCMI_HAILO_BOOT_SUCCESS_INDICATION_ID 9
 #define SCMI_HAILO_SWUPDATE_INDICATION_ID 10
+#define SCMI_HAILO_SEND_COMPONENTS_VERSION 11
 
 /*******************************
  * SCMI-Hailo notification IDs *
@@ -235,6 +236,16 @@ enum scmi_hailo_boot_success_notification_id {
 struct scmi_hailo_boot_success_indication_a2p {
 	/* Boot success indication can be sent by U-Boot or Linux */
 	uint8_t component;       // 0 - SCU FW, 1 - AP bootloader (uboot), 2 - AP software (Linux)
+	uint32_t component_version;
+} __packed;
+
+/***********************************************
+ * Send components version message definitions *
+ ***********************************************/
+
+struct scmi_hailo_send_components_version_p2a {
+	uint32_t scu_version;
+	uint32_t uboot_version;
 } __packed;
 
 #endif /* SCMI_HAILO_PROTOCOL_H */

@@ -142,8 +142,15 @@ int hailo15_isp_post_event(struct video_device *vdev,
 
 		mutex_unlock(&event_resource->event_lock);
 	} else {
-		pr_debug("%s: event id: %d not subscribed\n", __func__,
-			event_meta.event_id);
+		// reqbufs is also called before the daemon registers the event,
+		// get and set controls can be called at any time
+		if (event_meta.event_id != HAILO15_DAEMON_ISP_EVENT_REQBUFS &&
+		    event_meta.event_id != HAILO15_DAEMON_ISP_EVENT_S_CTRL &&
+		    event_meta.event_id != HAILO15_DAEMON_ISP_EVENT_G_CTRL) {
+			pr_info("%s: event id: %d not subscribed\n", __func__,
+				event_meta.event_id);
+			ret = -EINVAL;
+		}
 	}
 
 	return ret;

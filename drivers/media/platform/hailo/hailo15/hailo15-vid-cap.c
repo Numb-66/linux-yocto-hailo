@@ -37,7 +37,7 @@
 #define VALIDATE_STREAM_OFF(vid_node, do_fail)                                     \
 	do {                                                                       \
 		if ((vid_node)->streaming) {                                       \
-			pr_err("video_device: tried to call %s while steaming!\n", \
+			pr_err("video_device: tried to call %s while streaming!\n", \
 				   __func__);                                          \
 			do_fail;                                                   \
 		}                                                                  \
@@ -446,9 +446,13 @@ int hailo15_reqbufs(struct file *file, void *priv,
 	req.pad = pad->index;
 	req.num_buffers = p->count;
 
-	if (vid_node->path != VID_GRP_P2A)
-		hailo15_subdev_call(vid_node, core, ioctl, ISPIOC_V4L2_REQBUFS,
-					&req);
+	if (vid_node->path != VID_GRP_P2A){
+		ret = hailo15_subdev_call(vid_node, core, ioctl,
+			ISPIOC_V4L2_REQBUFS, &req);
+		if (ret) {
+			pr_err("%s - failed to set reqbufs on subdev, subdev call returned %d\n", __func__, ret);
+		}
+	}
 	return ret;
 }
 
@@ -1205,6 +1209,8 @@ static struct vb2_ops hailo15_buffer_ops = {
 	.queue_setup = hailo15_queue_setup,
 	.buf_prepare = hailo15_buffer_prepare,
 	.buf_queue = hailo15_buffer_queue,
+	.wait_prepare = vb2_ops_wait_prepare,
+	.wait_finish = vb2_ops_wait_finish,
 };
 
 static void

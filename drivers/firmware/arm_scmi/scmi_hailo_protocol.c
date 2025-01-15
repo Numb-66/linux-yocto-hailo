@@ -86,6 +86,13 @@ static int scmi_hailo_send_swupdate_ind(const struct scmi_protocol_handle *ph)
 	return ret;
 }
 
+static int scmi_hailo_send_send_components_version(const struct scmi_protocol_handle *ph, struct scmi_hailo_send_components_version_p2a *info)
+{
+	int ret = scmi_hailo_xfer(ph, SCMI_HAILO_SEND_COMPONENTS_VERSION, NULL, 0, info, sizeof(*info));
+	return ret;
+}
+
+
 static const struct scmi_hailo_proto_ops hailo_proto_ops = {
 	.get_boot_info = scmi_hailo_get_boot_info,
 	.get_fuse_info = scmi_hailo_get_fuse_info,
@@ -94,6 +101,7 @@ static const struct scmi_hailo_proto_ops hailo_proto_ops = {
 	.stop_measure = scmi_hailo_stop_measure,
 	.send_boot_success_ind = scmi_hailo_send_boot_success_ind,
 	.send_swupdate_ind = scmi_hailo_send_swupdate_ind,
+	.send_components_version = scmi_hailo_send_send_components_version,
 };
 
 static int scmi_hailo_protocol_init(const struct scmi_protocol_handle *ph)
@@ -102,12 +110,12 @@ static int scmi_hailo_protocol_init(const struct scmi_protocol_handle *ph)
 
 	ph->xops->version_get(ph, &version);
 
-	if (version != SCU_FW_BUILD_VERSION) {
-		dev_err(ph->dev, "Hailo Protocol version mismatch! Expected: %x but received received %x", SCU_FW_BUILD_VERSION, version);
+	if (version != SCU_FW_SCMI_VERSION) {
+		dev_err(ph->dev, "Hailo Protocol version mismatch! Expected: %x but received received %x", SCU_FW_SCMI_VERSION, version);
 		return -EINVAL;
 	}
 
-	dev_info(ph->dev, "Hailo Protocol Version %d.%d.%d\n",
+	dev_info(ph->dev, "Hailo SCMI Protocol Version %d.%d.%d\n",
 		SCU_FW_MAJOR, SCU_FW_MINOR, SCU_FW_REVISION);
 
 	return ph->set_priv(ph, NULL);

@@ -27,10 +27,84 @@
 #include "common.h"
 #include "hailo15-pixel-mux.h"
 
-#define HAILO15_BUFFER_READY_AP_INT_MASK_OFFSET 0x60
-#define HAILO15_BUFFER_READY_AP_INT_STATUS_OFFSET 0x64
-#define HAILO15_BUFFER_READY_AP_INT_W1C_OFFSET 0x68
-#define HAILO15_BUFFER_READY_AP_INT_W1S_OFFSET 0x6c
+struct pm_config {
+    uint16_t hailo15_buffer_ready_ap_int_mask_offset;
+    uint16_t hailo15_buffer_ready_ap_int_status_offset;
+    uint16_t hailo15_buffer_ready_ap_int_w1c_offset;
+    uint16_t hailo15_buffer_ready_ap_int_w1s_offset;
+
+    uint16_t pixel_mux_cfg_offset;
+    uint16_t isp0_stream0_offset;
+    uint16_t isp0_stream1_offset;
+    uint16_t isp0_stream2_offset;
+    uint16_t isp1_stream0_offset;
+    uint16_t isp1_stream1_offset;
+    uint16_t isp1_stream2_offset;
+    uint16_t vision_clock_conf_offset;
+    uint16_t vision_subsys_asf_int_mask_offset;
+    uint16_t vision_asf_int_fatal_mask_offset;
+    uint16_t vision_asf_int_nonfatal_mask_offset;
+    uint16_t vision_subsys_err_int_mask_offset;
+    uint16_t vision_subsys_err_int_agg_mask_offset;
+    uint16_t vision_buffer_ready_ap_int_mask_offset;
+    uint16_t hailo15_pixel_mux_vsync_mask_offset;
+
+    uint8_t vc_width;
+};
+
+static const struct pm_config hailo15_pm_config = {
+    .hailo15_buffer_ready_ap_int_mask_offset = 0x60,
+    .hailo15_buffer_ready_ap_int_status_offset = 0x64,
+    .hailo15_buffer_ready_ap_int_w1c_offset = 0x68,
+    .hailo15_buffer_ready_ap_int_w1s_offset = 0x6c,
+    .pixel_mux_cfg_offset = 0x2c,
+    .isp0_stream0_offset = 0x30,
+    .isp0_stream1_offset = 0x34,
+    .isp0_stream2_offset = 0x38,
+    .isp1_stream0_offset = 0x3c,
+    .isp1_stream1_offset = 0x40,
+    .isp1_stream2_offset = 0x44,
+    .vision_clock_conf_offset = 0x4c,
+    .vision_subsys_asf_int_mask_offset = 0x50,
+    .vision_asf_int_fatal_mask_offset = 0x80,
+    .vision_asf_int_nonfatal_mask_offset = 0x88,
+    .vision_subsys_err_int_mask_offset = 0x90,
+    .vision_subsys_err_int_agg_mask_offset = 0xc4,
+    .vision_buffer_ready_ap_int_mask_offset = 0x60,
+    .hailo15_pixel_mux_vsync_mask_offset = 0x48,
+    .vc_width = 2,
+};
+
+static const struct pm_config hailo15l_pm_config = {
+    .hailo15_buffer_ready_ap_int_mask_offset = 0x58,
+    .hailo15_buffer_ready_ap_int_status_offset = 0x5C,
+    .hailo15_buffer_ready_ap_int_w1c_offset = 0x60,
+    .hailo15_buffer_ready_ap_int_w1s_offset = 0x64,
+    .pixel_mux_cfg_offset = 0x24,
+    .isp0_stream0_offset = 0x28,
+    .isp0_stream1_offset = 0x2c,
+    .isp0_stream2_offset = 0x30,
+    .isp1_stream0_offset = 0x34,
+    .isp1_stream1_offset = 0x38,
+    .isp1_stream2_offset = 0x3c,
+    .vision_clock_conf_offset = 0x44,
+    .vision_subsys_asf_int_mask_offset = 0x48,
+    .vision_asf_int_fatal_mask_offset = 0x78,
+    .vision_asf_int_nonfatal_mask_offset = 0x80,
+    .vision_subsys_err_int_mask_offset = 0x88,
+    .vision_subsys_err_int_agg_mask_offset = 0xc0,
+    .vision_buffer_ready_ap_int_mask_offset = 0x58,
+    .hailo15_pixel_mux_vsync_mask_offset = 0x40,
+    .vc_width = 4,
+};
+
+static const struct of_device_id hailo_pixel_mux_of_table[] = {
+	{ .compatible = "hailo,hailo15-pixel-mux", .data = &hailo15_pm_config },
+	{ .compatible = "hailo,hailo15l-pixel-mux", .data = &hailo15l_pm_config },
+	{ /* sentinel */ }
+};
+
+MODULE_DEVICE_TABLE(of, hailo_pixel_mux_of_table);
 
 enum pixel_mux_pads {
 	PIXEL_MUX_PAD_SINK_0,
@@ -69,6 +143,7 @@ struct pixel_mux_priv {
 
 	/* Remote source */
 	struct v4l2_subdev *source_subdev;
+	const struct pm_config *pm_cfg;
 	int source_pad;
 	int dest_configured;
 };
@@ -130,6 +205,7 @@ static const struct hailo15_mux_cfg p2a_cfg_sdr = {
 };
 
 static const struct hailo15_mux_interrupt_cfg int_cfg = {
+	.pixel_mux_vsync_mask = 0xffff,
 	.vision_subsys_asf_int_mask = 0x1f,
 	.vision_asf_int_fatal_mask = 0xff,
 	.vision_asf_int_nonfatal_mask = 0xff,
@@ -142,28 +218,21 @@ static long pixel_mux_priv_ioctl(struct v4l2_subdev *sd, unsigned int cmd,
 {
 	struct hailo15_dma_ctx *ctx = v4l2_get_subdevdata(sd);
 	struct pixel_mux_priv *pixel_mux = ctx->dev;
-	int ret;
+    struct hailo15_p2a_buffer_regs_addr *p2a_buffer_regs = arg;
+	int ret = 0;
 
 	switch (cmd) {
 	case VIDEO_GET_P2A_REGS:
 		if (!arg)
 			ret = -EINVAL;
-		((struct hailo15_p2a_buffer_regs_addr *)arg)
-			->buffer_ready_ap_int_mask_addr =
-			pixel_mux->base +
-			HAILO15_BUFFER_READY_AP_INT_MASK_OFFSET;
-		((struct hailo15_p2a_buffer_regs_addr *)arg)
-			->buffer_ready_ap_int_status_addr =
-			pixel_mux->base +
-			HAILO15_BUFFER_READY_AP_INT_STATUS_OFFSET;
-		((struct hailo15_p2a_buffer_regs_addr *)arg)
-			->buffer_ready_ap_int_w1c_addr =
-			pixel_mux->base +
-			HAILO15_BUFFER_READY_AP_INT_W1C_OFFSET;
-		((struct hailo15_p2a_buffer_regs_addr *)arg)
-			->buffer_ready_ap_int_w1s_addr =
-			pixel_mux->base +
-			HAILO15_BUFFER_READY_AP_INT_W1S_OFFSET;
+		p2a_buffer_regs->buffer_ready_ap_int_mask_addr = pixel_mux->base + 
+			pixel_mux->pm_cfg->hailo15_buffer_ready_ap_int_mask_offset;
+		p2a_buffer_regs->buffer_ready_ap_int_status_addr = pixel_mux->base + 
+			pixel_mux->pm_cfg->hailo15_buffer_ready_ap_int_status_offset;
+		p2a_buffer_regs->buffer_ready_ap_int_w1c_addr = pixel_mux->base + 
+			pixel_mux->pm_cfg->hailo15_buffer_ready_ap_int_w1c_offset;
+		p2a_buffer_regs->buffer_ready_ap_int_w1s_addr = pixel_mux->base + 
+			pixel_mux->pm_cfg->hailo15_buffer_ready_ap_int_w1s_offset;
 		break;
 	default:
 		pr_debug("pixel_mux: got unsupported ioctl 0x%x\n", cmd);
@@ -214,30 +283,52 @@ static int hailo_pixel_mux_async_bound(struct v4l2_async_notifier *notifier,
 		MEDIA_LNK_FL_ENABLED | MEDIA_LNK_FL_IMMUTABLE);
 }
 
+unsigned int hailo15_mux_isp_stream_cfg_to_reg(
+	const struct pixel_mux_priv *pixel_mux,
+	const struct hailo15_mux_isp_stream_cfg *cfg)
+{
+	const unsigned int enable_bits = 1;
+	unsigned int vc_bits = pixel_mux->pm_cfg->vc_width;
+	return (cfg->enable | 
+		cfg->vc << enable_bits | 
+		cfg->dt << (enable_bits + vc_bits));
+}
+
 static void
 hailo_pixel_mux_configure_dest(const struct pixel_mux_priv *pixel_mux,
 			       const struct hailo15_mux_cfg *mux_cfg)
 {
+	const struct pm_config *pm_cfg = pixel_mux->pm_cfg;
 	pr_debug("%s enter\n", __func__);
-	writel(mux_cfg->pixel_mux_cfg, pixel_mux->base + PIXEL_MUX_CFG_OFFSET);
-	writel(mux_cfg->isp0_stream0, pixel_mux->base + ISP0_STREAM0_OFFSET);
-	writel(mux_cfg->isp0_stream1, pixel_mux->base + ISP0_STREAM1_OFFSET);
-	writel(mux_cfg->isp0_stream2, pixel_mux->base + ISP0_STREAM2_OFFSET);
-	writel(mux_cfg->isp1_stream0, pixel_mux->base + ISP1_STREAM0_OFFSET);
-	writel(mux_cfg->isp1_stream1, pixel_mux->base + ISP1_STREAM1_OFFSET);
-	writel(mux_cfg->isp1_stream2, pixel_mux->base + ISP1_STREAM2_OFFSET);
+
+	writel(mux_cfg->pixel_mux_cfg, pixel_mux->base + pm_cfg->pixel_mux_cfg_offset);
+	writel(hailo15_mux_isp_stream_cfg_to_reg(pixel_mux, &mux_cfg->isp0_stream0),
+		pixel_mux->base + pm_cfg->isp0_stream0_offset);
+	writel(hailo15_mux_isp_stream_cfg_to_reg(pixel_mux, &mux_cfg->isp0_stream1),
+		pixel_mux->base + pm_cfg->isp0_stream1_offset);
+	writel(hailo15_mux_isp_stream_cfg_to_reg(pixel_mux, &mux_cfg->isp0_stream2),
+		pixel_mux->base + pm_cfg->isp0_stream2_offset);
+	writel(hailo15_mux_isp_stream_cfg_to_reg(pixel_mux, &mux_cfg->isp1_stream0),
+		pixel_mux->base + pm_cfg->isp1_stream0_offset);
+	writel(hailo15_mux_isp_stream_cfg_to_reg(pixel_mux, &mux_cfg->isp1_stream1),
+		pixel_mux->base + pm_cfg->isp1_stream1_offset);
+	writel(hailo15_mux_isp_stream_cfg_to_reg(pixel_mux, &mux_cfg->isp1_stream2),
+		pixel_mux->base + pm_cfg->isp1_stream2_offset);
+
 	writel(mux_cfg->vision_buffer_ready_ap_int_mask,
-	       pixel_mux->base + VISION_BUFFER_READY_AP_INT_MASK_OFFSET);
+		pixel_mux->base + pm_cfg->vision_buffer_ready_ap_int_mask_offset);
+	writel(int_cfg.pixel_mux_vsync_mask,
+		pixel_mux->base + pm_cfg->hailo15_pixel_mux_vsync_mask_offset);
 	writel(int_cfg.vision_subsys_asf_int_mask,
-	       pixel_mux->base + VISION_SUBSYS_ASF_INT_MASK_OFFSET);
+		pixel_mux->base + pm_cfg->vision_subsys_asf_int_mask_offset);
 	writel(int_cfg.vision_asf_int_fatal_mask,
-	       pixel_mux->base + VISION_ASF_INT_FATAL_MASK_OFFSET);
+		pixel_mux->base + pm_cfg->vision_asf_int_fatal_mask_offset);
 	writel(int_cfg.vision_asf_int_nonfatal_mask,
-	       pixel_mux->base + VISION_ASF_INT_NONFATAL_MASK_OFFSET);
+		pixel_mux->base + pm_cfg->vision_asf_int_nonfatal_mask_offset);
 	writel(int_cfg.vision_subsys_err_int_mask,
-	       pixel_mux->base + VISION_SUBSYS_ERR_INT_MASK_OFFSET);
+		pixel_mux->base + pm_cfg->vision_subsys_err_int_mask_offset);
 	writel(int_cfg.vision_subsys_err_int_agg_mask,
-	       pixel_mux->base + VISION_SUBSYS_ERR_INT_AGG_MASK_OFFSET);
+		pixel_mux->base + pm_cfg->vision_subsys_err_int_agg_mask_offset);
 }
 
 static int pixel_mux_s_stream(struct v4l2_subdev *sd, int enable)
@@ -312,7 +403,12 @@ static int pixel_mux_s_stream(struct v4l2_subdev *sd, int enable)
 
 	if (pad && is_media_entity_v4l2_subdev(pad->entity)) {
 		subdev = media_entity_to_v4l2_subdev(pad->entity);
-		v4l2_subdev_call(subdev, video, s_stream, enable);
+		ret = v4l2_subdev_call(subdev, video, s_stream, enable);
+		if (ret) {
+			dev_err(pixel_mux->dev, "%s: failed to set enable source subdev\n",
+				__func__);
+			goto finish;
+		}
 	}
 	ret = 0;
 	goto finish;
@@ -506,12 +602,31 @@ static int pixel_mux_probe(struct platform_device *pdev)
 	int ret;
 	struct resource *res;
 	unsigned int i;
+	struct device_node *np = pdev->dev.of_node;
+	const struct pm_config *pm_config = NULL;
 
 	dev_info(&pdev->dev, "probe started");
 
 	pixel_mux = kzalloc(sizeof(*pixel_mux), GFP_KERNEL);
 	if (!pixel_mux)
 		return -ENOMEM;
+
+	if (np) {
+		const struct of_device_id *match;
+
+		match = of_match_node(hailo_pixel_mux_of_table, np);
+		if (match && match->data) {
+			pm_config = match->data;
+		}
+	}
+
+	if (!pm_config) {
+		dev_err(&pdev->dev, "pm_config is NULL\n");
+		goto error_free_dev;
+	}
+
+	pixel_mux->pm_cfg = pm_config;
+
 	platform_set_drvdata(pdev, pixel_mux);
 
 	pixel_mux->dev = &pdev->dev;
@@ -614,6 +729,8 @@ probe_err_entity_cleanup:
 err_init_dma_ctx:
 err_alloc_dma_ctx:
 	media_entity_cleanup(&subdev->entity);
+error_free_dev:
+	kfree(pixel_mux);
 	return ret;
 }
 
@@ -633,12 +750,6 @@ static int pixel_mux_remove(struct platform_device *pdev)
 
 	return 0;
 }
-
-static const struct of_device_id hailo_pixel_mux_of_table[] = {
-	{ .compatible = "hailo,hailo15-pixel-mux" },
-	{},
-};
-MODULE_DEVICE_TABLE(of, hailo_pixel_mux_of_table);
 
 static struct platform_driver pixel_mux_driver = {
 	.probe	= pixel_mux_probe,

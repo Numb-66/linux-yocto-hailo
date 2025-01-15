@@ -5,6 +5,7 @@
 #include <linux/platform_device.h>
 #include <linux/of.h>
 #include <linux/soc/hailo/scmi_hailo_ops.h>
+#include <dt-bindings/soc/hailo15_release_version.h>
 
 #define	SCMI_HAILO_BOOT_SUCCESS_AP_SOFTWARE  1
 #define	SCMI_HAILO_BOOT_SUCCESS_SW_UPDATE 99
@@ -27,6 +28,7 @@ struct hailo_soc {
 	struct scmi_hailo_get_boot_info_p2a boot_info;
 	struct kernfs_node *fuse_kn;
 	struct soc_device *soc_dev;
+	struct scmi_hailo_send_components_version_p2a components_version;
 };
 
 #define H15__SCU_BOOT_BIT_MASK (3)
@@ -202,6 +204,50 @@ static ssize_t fuse_show(struct device *dev, struct device_attribute *attr,
 
 static DEVICE_ATTR_RO(fuse);
 
+static ssize_t hailo_scu_fw_version_show(struct device *dev, struct device_attribute *attr,
+			 char *buf)
+{
+	struct hailo_soc *hailo_soc = dev_get_drvdata(dev);
+
+	return sprintf(buf, "%d.%d.%d\n",
+		((hailo_soc->components_version.scu_version >> 24) & 0xff),
+		((hailo_soc->components_version.scu_version >> 16) & 0xff),
+		 (hailo_soc->components_version.scu_version & 0xffff));
+}
+
+static ssize_t hailo_uboot_version_show(struct device *dev, struct device_attribute *attr,
+			 char *buf)
+{
+	struct hailo_soc *hailo_soc = dev_get_drvdata(dev);
+
+	return sprintf(buf, "%d.%d.%d\n",
+		((hailo_soc->components_version.uboot_version >> 24) & 0xff),
+		((hailo_soc->components_version.uboot_version >> 16) & 0xff),
+		 (hailo_soc->components_version.uboot_version & 0xffff));
+}
+
+static ssize_t hailo_linux_version_show(struct device *dev, struct device_attribute *attr,
+			 char *buf)
+{
+	return sprintf(buf, "%d.%d.%d\n",
+		((HAILO_LINUX_RELEASE_BUILD_VERSION >> 24) & 0xff),
+		((HAILO_LINUX_RELEASE_BUILD_VERSION >> 16) & 0xff),
+		 (HAILO_LINUX_RELEASE_BUILD_VERSION & 0xffff));
+}
+
+static DEVICE_ATTR_RO(hailo_scu_fw_version);
+static DEVICE_ATTR_RO(hailo_uboot_version);
+static DEVICE_ATTR_RO(hailo_linux_version);
+
+static struct attribute *hailo_versions_attrs[] = {
+	&dev_attr_hailo_scu_fw_version.attr,
+	&dev_attr_hailo_uboot_version.attr,
+	&dev_attr_hailo_linux_version.attr,
+	NULL,
+};
+
+static const struct attribute_group hailo_versions_group = { .name = "hailo_versions", .attrs = hailo_versions_attrs, };
+
 static struct attribute *hailo_attrs[] = { &dev_attr_fuse.attr, NULL };
 
 ATTRIBUTE_GROUPS(hailo);
@@ -260,6 +306,17 @@ static int hailo_soc_probe(struct platform_device *pdev)
 		return ret;
 	}
 
+	ret = hailo_ops->send_components_version(&hailo_soc->components_version);
+	if (ret) {
+		dev_err(&pdev->dev, "Failed to get fw versions\n");
+		return ret;
+	}
+
+	dev_info(&pdev->dev, "scu version %d.%d.%d, uboot version %d.%d.%d, linux version %d.%d.%d\n",
+		((hailo_soc->components_version.scu_version >> 24) & 0xff), ((hailo_soc->components_version.scu_version >> 16) & 0xff), (hailo_soc->components_version.scu_version & 0xffff),
+		((hailo_soc->components_version.uboot_version >> 24) & 0xff), ((hailo_soc->components_version.uboot_version >> 16) & 0xff), (hailo_soc->components_version.uboot_version & 0xffff),
+		((HAILO_LINUX_RELEASE_BUILD_VERSION >> 24) & 0xff), ((HAILO_LINUX_RELEASE_BUILD_VERSION >> 16) & 0xff), (HAILO_LINUX_RELEASE_BUILD_VERSION & 0xffff));
+
 	soc_dev = soc_device_register(soc_dev_attr);
 	if (IS_ERR(soc_dev)) {
 		kfree(soc_dev_attr);
@@ -272,6 +329,13 @@ static int hailo_soc_probe(struct platform_device *pdev)
 	ret = sysfs_create_group(&dev->kobj, &hailo_boot_info_group);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to create boot_info group\n");
+		return ret;
+	}
+
+	// Create attribute group "hailo_versions" under hailo soc device
+	ret = sysfs_create_group(&dev->kobj, &hailo_versions_group);
+	if (ret) {
+		dev_err(&pdev->dev, "Failed to create hailo_versions group\n");
 		return ret;
 	}
 

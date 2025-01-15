@@ -67,9 +67,9 @@
 #define IMX715_REG_MIN 0x00
 #define IMX715_REG_MAX 0xfffff
 
-#define IMX715_TPG_EN_DUOUT 0x30e0 /* TEST PATTERN ENABLE */
-#define IMX715_TPG_PATSEL_DUOUT 0x30e2 /*Patsel mode */
-#define IMX715_TPG_COLOR_WIDTH 0x30e4 /*color width */
+#define IMX715_TPG_EN_DUOUT 0x30e4 /* TEST PATTERN ENABLE */
+#define IMX715_TPG_PATSEL_DUOUT 0x30e6 /* Patsel mode */
+#define IMX715_TPG_COLOR_WIDTH 0x30e8 /* color width */
 
 static int imx715_set_ctrl(struct v4l2_ctrl *ctrl);
 
@@ -913,8 +913,11 @@ static int imx715_set_ctrl(struct v4l2_ctrl *ctrl)
 
 		break;
 	case V4L2_CID_WIDE_DYNAMIC_RANGE:		
-		// Not supported yet
-		dev_warn(imx715->dev, "V4L2_CID_WIDE_DYNAMIC_RANGE not suppoterd yet\n");
+        if (ctrl->val) {
+            // Not supported yet
+		    dev_err(imx715->dev, "V4L2_CID_WIDE_DYNAMIC_RANGE not suppoterd yet\n");
+            return -EINVAL;
+        }
 
 		if (imx715->streaming) {
 			dev_warn(imx715->dev,

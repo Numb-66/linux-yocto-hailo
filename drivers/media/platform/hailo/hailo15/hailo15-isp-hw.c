@@ -49,12 +49,15 @@ void hailo15_isp_wrapper_write_reg(struct hailo15_isp_device *isp_dev,
 void hailo15_config_isp_wrapper(struct hailo15_isp_device *isp_dev)
 {
 	pr_debug("%s - writting to isp wrapper interrupt masks\n", __func__);
-	hailo15_isp_wrapper_write_reg(isp_dev, ISP_WRAPPER_FATAL_ASF_INT_MASK,
-				      FATAL_ASF_INT_SET);
-	hailo15_isp_wrapper_write_reg(isp_dev, ISP_FUNC_INT_MASK,
-				      FUNC_INT_SET_ALL);
-	hailo15_isp_wrapper_write_reg(isp_dev, ISP_ERR_INT_MASK,
-				      ERR_INT_SET_ALL);
+	hailo15_isp_wrapper_write_reg(isp_dev,
+		isp_dev->wrapper_cfg->fatal_asf_int_mask_offset,
+		isp_dev->wrapper_cfg->fatal_asf_int_mask_value);
+	hailo15_isp_wrapper_write_reg(isp_dev, 
+		isp_dev->wrapper_cfg->func_int_mask_offset,
+		isp_dev->wrapper_cfg->func_int_mask_value);
+	hailo15_isp_wrapper_write_reg(isp_dev,
+		isp_dev->wrapper_cfg->err_int_mask_offset,
+		isp_dev->wrapper_cfg->err_int_mask_value);
 }
 
 void hailo15_isp_reset_hw(struct hailo15_isp_device* isp_dev){
@@ -367,14 +370,26 @@ static void hailo15_isp_handle_frame_rx_rdma(struct hailo15_isp_device *isp_dev,
 	}
 	if(isp_dev->frame_end){
 		atomic_set(&isp_dev->frame_received, 1);
-		mod_timer(&isp_dev->frame_timer, jiffies + msecs_to_jiffies(FRAME_TIMEOUT_MS));
 	}
 	if(isp_dev->frame_end && isp_dev->dma_ready &&  (!isp_dev->fe_enable || isp_dev->fe_ready)){
-		/* do rx_rdma */
-		hailo15_isp_buffer_done(isp_dev, ISP_MCM_IN);
 		isp_dev->dma_ready = 0;
 		isp_dev->frame_end = 0;
 		isp_dev->fe_ready = 0;
+
+		if (isp_dev->mcm_mode == ISP_MCM_MODE_INJECTION) {
+			mutex_lock(&isp_dev->ready_lock);
+			if (isp_dev->output_ready){
+				/* do rx_rdma */
+				hailo15_isp_buffer_done(isp_dev, ISP_MCM_IN);
+			} else {
+				/* indicates that the MCM is waiting for the MP to have a buffer ready */
+				isp_dev->mcm_waiting = 1;
+			}
+			mutex_unlock(&isp_dev->ready_lock);
+		} else {
+			/* do rx_rdma without waiting in HDR */
+			hailo15_isp_buffer_done(isp_dev, ISP_MCM_IN);
+		}
 	}
 }
 
@@ -388,7 +403,6 @@ static void hailo15_isp_handle_frame_rx_mp(struct hailo15_isp_device *isp_dev,
 		return;
 
 	atomic_set(&isp_dev->frame_received, 1);
-	mod_timer(&isp_dev->frame_timer, jiffies + msecs_to_jiffies(FRAME_TIMEOUT_MS));
 
 	/*do_rx_mp*/
 	hailo15_isp_buffer_done(isp_dev, ISP_MP);
@@ -404,7 +418,6 @@ static void hailo15_isp_handle_frame_rx_sp2(struct hailo15_isp_device *isp_dev,
 		return;
 
 	atomic_set(&isp_dev->frame_received, 1);
-	mod_timer(&isp_dev->frame_timer, jiffies + msecs_to_jiffies(FRAME_TIMEOUT_MS));
 
 	/*do_rx_sp2*/
 	hailo15_isp_buffer_done(isp_dev, ISP_SP2);

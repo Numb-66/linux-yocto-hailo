@@ -397,10 +397,6 @@
                     };
                 };
             };
-
-            dphyrx0: dphy@0x7c013000L{
-                reg = <0x0 0x7c013000L 0x0 0x1000>;
-            };
         };
 
         csi2rx1: csi-bridge@7c015000 {
@@ -417,10 +413,6 @@
                     "pixel_if0_clk", "pixel_if1_clk",
                     "pixel_if2_clk", "pixel_if3_clk";
             interrupts = <GIC_SPI HW_INTERRUPTS__CSI_RX1_IRQ IRQ_TYPE_LEVEL_HIGH>;
-
-            dphyrx1: dphy@0x7c017000L{
-                reg = <0x0 0x7c017000L 0x0 0x1000>;
-            };
         };
 
         dpi0: dpi@1a98000 {
@@ -527,7 +519,6 @@
 
         hailo_isp: isp@7C000000 {
             status = "disabled";
-            compatible = "hailo,isp";
             id = <0>;
             reg = <0 0x7C000000 0 0x10000>, <0 0x7c01e000 0 0x1000>;
             interrupts = <GIC_SPI HW_INTERRUPTS__ISP_FUNC_INTERRUPT_IRQ IRQ_TYPE_LEVEL_HIGH>;
@@ -569,7 +560,6 @@
 
         hailo_pixel_mux: hailo_pixel_mux@7C01C000 {
             status = "disabled";
-            compatible = "hailo,hailo15-pixel-mux";
             reg = <0 0x7C01C000 0 2000>;
             ranges;
             // vision hclk + vision clk - necessary for accessing pixel mux registers
@@ -601,7 +591,6 @@
 
         rxwrapper0: rxwrapper0@7c010000 {
             status = "disabled";
-            compatible = "hailo,hailo15-rxwrapper";
             reg = <0 0x7C010000 0 0x1000>;
             interrupts = <0 HW_INTERRUPTS__VISION_BUFFER_READY_AP_INT_IRQ 4>, <0 HW_INTERRUPTS__VISION_SUBSYS_ERR_INT_IRQ 4>;
             ranges;
@@ -823,7 +812,7 @@
             shmem = <&cpu_scp_tx>, <&cpu_scp_rx>;
             #address-cells = <1>;
             #size-cells = <0>;
-            fw-ver = <SCU_FW_BUILD_VERSION>;
+            fw-ver = <SCU_FW_SCMI_VERSION>;
 
             scmi_devpd: protocol@11 {
                 reg = <0x11>;

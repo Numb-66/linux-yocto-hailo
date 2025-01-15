@@ -86,6 +86,7 @@ static int hailo15_isp_aev2_s_ctrl(struct v4l2_ctrl *ctrl)
 	case HAILO15_ISP_CID_AE_HIST_WINDOW:
 	case HAILO15_ISP_CID_AE_HIST_WEIGHT:
 	case HAILO15_ISP_CID_AE_EXP_WINDOW:
+	case HAILO15_ISP_CID_AE_HCG:
 		pr_debug("%s - got s_ctrl with id: 0x%x\n", __func__, ctrl->id);
 		ret = hailo15_isp_s_ctrl_event(isp_dev, isp_dev->ctrl_pad,
 					       ctrl);
@@ -135,6 +136,7 @@ static int hailo15_isp_aev2_g_ctrl(struct v4l2_ctrl *ctrl)
 	case HAILO15_ISP_CID_AE_HDR_INTEGRATION_TIMES:
 	case HAILO15_ISP_CID_AE_EXP_INPUT:
 	case HAILO15_ISP_CID_AE_EXP_WINDOW:
+	case HAILO15_ISP_CID_AE_HCG:
 		pr_debug("%s - got g_ctrl with id: 0x%x\n", __func__, ctrl->id);
 		ret = hailo15_isp_g_ctrl_event(isp_dev, isp_dev->ctrl_pad,
 					       ctrl);
@@ -503,6 +505,17 @@ const struct v4l2_ctrl_config hailo15_isp_aev2_ctrls[] = {
         .dims = {3},
         .def = 1,
     },
+	{
+		.ops = &hailo15_isp_aev2_ctrl_ops,
+		.id = HAILO15_ISP_CID_AE_HCG,
+		.type = V4L2_CTRL_TYPE_BOOLEAN,
+		.flags = V4L2_CTRL_FLAG_VOLATILE |
+			 V4L2_CTRL_FLAG_EXECUTE_ON_WRITE,
+		.name = "isp_ae_hcg",
+		.step = 1,
+		.min = 0,
+		.max = 1,
+	},
 };
 
 int hailo15_isp_aev2_ctrl_count(void)

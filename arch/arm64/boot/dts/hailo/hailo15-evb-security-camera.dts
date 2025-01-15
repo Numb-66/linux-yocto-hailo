@@ -29,7 +29,7 @@
 &i2c_0 {
     sensor_0: camera-sensor@1a {
         status = "okay";
-        compatible = "sony,imx334", "sony,imx675", "sony,imx678";
+        compatible = "sony,imx334", "sony,imx675", "sony,imx678", "sony,imx715";
         reg = <0x1a>;
         clocks = <&sensor_clk>;
         clock-names = "inclk";

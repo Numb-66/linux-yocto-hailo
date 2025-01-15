@@ -109,8 +109,42 @@
     };
 
     vision_subsys: vision_subsys {
+        csi2rx0: csi-bridge@7c011000 {
+            phys = <&dphyrx0>;
+            phy-names = "dphy";
+
+            dphyrx0: dphy@7c013000 {
+                status = "ok";
+                reg = <0x0 0x7c013000 0x0 0x1000>;
+                compatible = "hailo,hailo15-dphy";
+                #phy-cells = <0>;
+            };
+        };
+
         csi2rx1: csi-bridge@7c015000 {
             power-domains = <&scmi_devpd HAILO15_SCMI_POWER_DOMAIN_IDX_CSI_RX1>;
+
+            phys = <&dphyrx1>;
+            phy-names = "dphy";
+
+            dphyrx1: dphy@7c017000 {
+                status = "ok";
+                reg = <0x0 0x7c017000 0x0 0x1000>;
+                compatible = "hailo,hailo15-dphy";
+                #phy-cells = <0>;
+            };
+        };
+
+        hailo_isp: isp@7C000000 {
+            compatible = "hailo,hailo15-isp";
+        };
+
+        hailo_pixel_mux: hailo_pixel_mux@7C01C000 {
+            compatible = "hailo,hailo15-pixel-mux";
+        };
+
+        rxwrapper0: rxwrapper0@7c010000 {
+            compatible = "hailo,hailo15-rxwrapper";
         };
     };
 

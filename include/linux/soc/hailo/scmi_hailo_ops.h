@@ -17,6 +17,7 @@ struct scmi_hailo_ops {
     int (*stop_measure)(bool *was_running);
     int (*send_boot_success_ind)(struct scmi_hailo_boot_success_indication_a2p *params);
 	int (*send_swupdate_ind)(void);
+    int (*send_components_version)(struct scmi_hailo_send_components_version_p2a *info);
 };
 
 #if IS_ENABLED(CONFIG_HAILO_SCMI_PROTOCOL)

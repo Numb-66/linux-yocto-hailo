@@ -62,7 +62,7 @@ static int hailo15_isp_hdr_s_ctrl(struct v4l2_ctrl *ctrl)
 	struct hailo15_isp_device *isp_dev = container_of(
 		ctrl->handler, struct hailo15_isp_device, ctrl_handler);
 	
-	pr_info("%s - enter with cid %d\n", __func__, ctrl->id);
+	pr_debug("%s - enter with cid %d\n", __func__, ctrl->id);
 
 	switch (ctrl->id) {
 	case HAILO15_ISP_CID_HDR_RATIO:
@@ -86,7 +86,7 @@ static int hailo15_isp_hdr_g_ctrl(struct v4l2_ctrl *ctrl)
 	struct hailo15_isp_device *isp_dev = container_of(
 		ctrl->handler, struct hailo15_isp_device, ctrl_handler);
 
-	pr_info("%s - enter with cid %d\n", __func__, ctrl->id);
+    pr_debug("%s - enter with cid %d\n", __func__, ctrl->id);
 
 	switch (ctrl->id) {
 	case HAILO15_ISP_CID_HDR_RATIO:

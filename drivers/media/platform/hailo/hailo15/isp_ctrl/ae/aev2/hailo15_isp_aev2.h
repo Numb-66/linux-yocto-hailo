@@ -85,6 +85,7 @@
 #define HAILO15_ISP_CID_AE_SENSOR_GAIN (HAILO15_ISP_CID_AE_BASE + 0x001C)
 #define HAILO15_ISP_CID_AE_HDR_GAINS (HAILO15_ISP_CID_AE_BASE + 0x001D)
 #define HAILO15_ISP_CID_AE_HDR_INTEGRATION_TIMES (HAILO15_ISP_CID_AE_BASE + 0x001E)
+#define HAILO15_ISP_CID_AE_HCG (HAILO15_ISP_CID_AE_BASE + 0x001F)
 
 int hailo15_isp_aev2_ctrl_count(void);
 int hailo15_isp_aev2_ctrl_create(struct hailo15_isp_device *isp_dev);

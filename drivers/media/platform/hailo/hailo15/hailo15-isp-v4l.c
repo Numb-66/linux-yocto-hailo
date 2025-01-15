@@ -32,6 +32,34 @@
 #define HAILO15_ISP_FBUF_SIZE (3840 * 2160 * 2)
 #define HAILO15_ISP_FAKEBUF_SIZE (3840 * 2160 * 3)
 
+
+static const struct isp_wrapper_config hailo15_isp_wrapper_config = {
+    .fatal_asf_int_mask_offset = 0x4,
+    .fatal_asf_int_mask_value = 0x1,
+    .func_int_mask_offset = 0x38,
+    .func_int_mask_value = 0x7,
+    .err_int_mask_offset = 0x40,
+    .err_int_mask_value = 0x3ffff,
+};
+
+static const struct isp_wrapper_config hailo15l_isp_wrapper_config = {
+    .fatal_asf_int_mask_offset = 0x4,
+    .fatal_asf_int_mask_value = 0xFF,
+    .func_int_mask_offset = 0x4c,
+    .func_int_mask_value = 0x7,
+    .err_int_mask_offset = 0x54,
+    .err_int_mask_value = 0xFFFFFFFF,
+};
+
+static const struct of_device_id hailo15_isp_of_match[] = {
+	{ .compatible = "hailo,hailo15-isp", .data = &hailo15_isp_wrapper_config },
+	{ .compatible = "hailo,hailo15l-isp", .data = &hailo15l_isp_wrapper_config },
+	{ /* sentinel */ },
+};
+
+MODULE_DEVICE_TABLE(of, hailo15_isp_of_match);
+
+
 #define VID_GRP_TO_ISP_PATH(vid_grp)                                           \
 	({                                                                     \
 		int __path;                                                    \
@@ -124,7 +152,6 @@ hailo15_isp_configure_buffer(struct hailo15_isp_device *isp_dev,
 {
 	// Validate that buffer address is in a specific range? 
 	int isp_path;
-	unsigned long flags;
 
 	if(!buf)
 		return;
@@ -137,15 +164,15 @@ hailo15_isp_configure_buffer(struct hailo15_isp_device *isp_dev,
 			pr_err("trying to configure mcm buffer with rdma disabled!\n");
 			return;
 		}
-		spin_lock_irqsave(&isp_dev->mcm_lock, flags);
+		mutex_lock(&isp_dev->mcm_lock);
 		if(isp_dev->cur_buf[isp_path]){
 			list_add_tail(&buf->irqlist, &isp_dev->mcm_queue);
-			spin_unlock_irqrestore(&isp_dev->mcm_lock, flags);
+			mutex_unlock(&isp_dev->mcm_lock);
 			return;
 		}
 
 		isp_dev->cur_buf[isp_path] = buf;
-		spin_unlock_irqrestore(&isp_dev->mcm_lock, flags);
+		mutex_unlock(&isp_dev->mcm_lock);
 	}else{
 		isp_dev->cur_buf[isp_path] = buf;
 	}
@@ -672,14 +699,15 @@ static int hailo15_isp_s_stream(struct v4l2_subdev *sd, int enable)
 
 		isp_dev->queue_empty[path] = 0;
 		isp_dev->current_vsm_index[path] = -1;
+
+		mutex_lock(&isp_dev->ready_lock);
+		isp_dev->output_ready = 1;
+		mutex_unlock(&isp_dev->ready_lock);
+
 		ret = hailo15_isp_post_event_start_stream(isp_dev);
 		if (ret) {
 			pr_warn("%s - start stream event failed with %d\n", __func__, ret);
 			return ret;
-		}
-		timer_setup(&isp_dev->frame_timer, frame_timeout_handler, 0);
-		if(mod_timer(&isp_dev->frame_timer, jiffies + msecs_to_jiffies(FRAME_TIMEOUT_MS))){
-			pr_warn("frame timer was pending after setup\n");
 		}
 	}
 	if(!isp_dev->rdma_enable){
@@ -690,7 +718,19 @@ static int hailo15_isp_s_stream(struct v4l2_subdev *sd, int enable)
 		if (pad && is_media_entity_v4l2_subdev(pad->entity)) {
 			subdev = media_entity_to_v4l2_subdev(pad->entity);
 			subdev->grp_id = sd->grp_id;
-			v4l2_subdev_call(subdev, video, s_stream, enable);
+			ret = v4l2_subdev_call(subdev, video, s_stream, enable);
+			if (ret) {
+				pr_err("subdev s_stream failed with %d\n", ret);
+				goto disable;
+			}
+		}
+	}
+
+	// enable frame timeout timer only after subdevs are enabled
+	if (enable) {
+		timer_setup(&isp_dev->frame_timer, frame_timeout_handler, 0);
+		if(mod_timer(&isp_dev->frame_timer, jiffies + msecs_to_jiffies(FRAME_TIMEOUT_MS))){
+			pr_warn("frame timer was pending after setup\n");
 		}
 	}
 
@@ -701,27 +741,40 @@ static int hailo15_isp_s_stream(struct v4l2_subdev *sd, int enable)
 			return -EINVAL;
 
 		del_timer_sync(&isp_dev->frame_timer);
+		atomic_set(&isp_dev->streaming_started, 0);
 
+disable:
 		if(path == ISP_MCM_IN){
 			isp_dev->rdma_enable = 0;
 			isp_dev->dma_ready = 0;
 			isp_dev->frame_end = 0;
 			isp_dev->fe_ready = 0;
 			isp_dev->fe_enable = 0;
-			spin_lock_irqsave(&isp_dev->mcm_lock, flags);
+
+			mutex_lock(&isp_dev->ready_lock);
+			isp_dev->mcm_waiting = 0;
+			mutex_unlock(&isp_dev->ready_lock);
+
+			mutex_lock(&isp_dev->mcm_lock);
 			list_for_each_entry_safe(pos, npos, &isp_dev->mcm_queue, irqlist){
 				hailo15_dma_buffer_done(ctx, ISP_PATH_TO_VID_GRP(path), pos);
 				list_del(&pos->irqlist);
 			}
 			hailo15_dma_buffer_done(ctx, ISP_PATH_TO_VID_GRP(path), isp_dev->cur_buf[ISP_MCM_IN]);
 			isp_dev->cur_buf[ISP_MCM_IN] = NULL;
-			spin_unlock_irqrestore(&isp_dev->mcm_lock, flags);
+			mutex_unlock(&isp_dev->mcm_lock);
 
-			return 0;
+			return ret;
 		}
 		isp_dev->mcm_mode = 0;
 		isp_dev->frame_count[path] = 0;
 		isp_dev->mi_stopped[path] = 1;
+
+		/* indicate to vid-out to stop queueing in case it's running */
+		mutex_lock(&isp_dev->ready_lock);
+		isp_dev->output_ready = 0;
+		mutex_unlock(&isp_dev->ready_lock);
+
 		isp_dev->cur_buf[path] = NULL;
 		memset(&isp_dev->input_fmt, 0, sizeof(isp_dev->input_fmt));
 		ret = hailo15_isp_post_event_stop_stream(isp_dev);
@@ -910,9 +963,8 @@ static struct v4l2_subdev_internal_ops hailo15_isp_internal_ops = {
 inline void hailo15_isp_buffer_done(struct hailo15_isp_device *isp_dev,
 					int path)
 {
-	struct hailo15_buffer *buf;
+	struct hailo15_buffer *buf, *next_buf = NULL;
 	struct hailo15_dma_ctx *ctx = v4l2_get_subdevdata(&isp_dev->sd);
-	unsigned long flags;
 
 	if (path < 0 || path >= ISP_MAX_PATH)
 		return;
@@ -920,18 +972,22 @@ inline void hailo15_isp_buffer_done(struct hailo15_isp_device *isp_dev,
 	++isp_dev->frame_count[path];
 	
 	if(path == ISP_MCM_IN){
-		spin_lock_irqsave(&isp_dev->mcm_lock, flags);
+		mutex_lock(&isp_dev->mcm_lock);
 		buf = isp_dev->cur_buf[path];
 		isp_dev->cur_buf[path] = list_first_entry_or_null(&isp_dev->mcm_queue, struct hailo15_buffer, irqlist);
 		if(!buf){
-			spin_unlock_irqrestore(&isp_dev->mcm_lock, flags);
+			mutex_unlock(&isp_dev->mcm_lock);
 			return;
 		}
 		if(isp_dev->cur_buf[path]){
 			list_del(&isp_dev->cur_buf[path]->irqlist);
-			hailo15_isp_configure_frame_base(isp_dev, buf->dma, path);
+			next_buf = isp_dev->cur_buf[path];
 		}
-		spin_unlock_irqrestore(&isp_dev->mcm_lock, flags);
+		mutex_unlock(&isp_dev->mcm_lock);
+		if(next_buf){
+			hailo15_isp_configure_frame_base(isp_dev, next_buf->dma, path);
+		}
+
 	} else{
 
 		buf = isp_dev->cur_buf[path];
@@ -974,6 +1030,16 @@ static int hailo15_isp_buffer_process(struct hailo15_dma_ctx *ctx,
 	if (isp_dev->queue_empty[path]) {
 		hailo15_isp_dma_set_enable(isp_dev, path, 1);
 		isp_dev->queue_empty[path] = 0;
+		if (isp_dev->mcm_mode == ISP_MCM_MODE_INJECTION) {
+			mutex_lock(&isp_dev->ready_lock);
+			if (isp_dev->mcm_waiting && path == ISP_MP) {
+				 /* indicates that the MCM can be done with a buffer */
+				isp_dev->output_ready = 1;
+				hailo15_isp_buffer_done(isp_dev, ISP_MCM_IN);
+				isp_dev->mcm_waiting = 0;
+			}
+			mutex_unlock(&isp_dev->ready_lock);
+		}
 	}
 
 	return 0;
@@ -1095,6 +1161,7 @@ static int hailo15_isp_queue_empty(struct hailo15_dma_ctx *ctx, int path)
 	hailo15_isp_configure_frame_base(isp_dev, fakebuf_arr, path);
 	hailo15_isp_dma_set_enable(isp_dev, path, 0);
 	isp_dev->queue_empty[path] = 1;
+	isp_dev->output_ready = 0;
 	return 0;
 }
 
@@ -1314,7 +1381,10 @@ static int hailo15_init_isp_device(struct hailo15_isp_device *isp_dev)
 		isp_dev->mi_stopped[path] = 1;
 	/*queue_empty field should not be set to 1 as the software assumes empty queue on initialization*/
 	INIT_LIST_HEAD(&isp_dev->mcm_queue);
-	spin_lock_init(&isp_dev->mcm_lock);
+	mutex_init(&isp_dev->mcm_lock);
+	mutex_init(&isp_dev->ready_lock);
+	isp_dev->output_ready = 1;
+	isp_dev->mcm_waiting = 0;
 	INIT_LIST_HEAD(&isp_dev->miv2_mis_queue);
 	spin_lock_init(&isp_dev->miv2_mis_lock);
 	isp_dev->miv2_mis_wq = alloc_ordered_workqueue("miv2_mis_wq", WQ_HIGHPRI);
@@ -1352,6 +1422,8 @@ static void hailo15_clean_isp_device(struct hailo15_isp_device *isp_dev)
 	mutex_destroy(&isp_dev->mlock);
 	mutex_destroy(&isp_dev->ctrl_lock);
 	mutex_destroy(&isp_dev->af_kevent->data_lock);
+	mutex_destroy(&isp_dev->mcm_lock);
+	mutex_destroy(&isp_dev->ready_lock);
 	destroy_workqueue(isp_dev->af_wq);
 }
 
@@ -1414,13 +1486,14 @@ static int hailo15_isp_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct hailo15_isp_device *isp_dev;
 	struct hailo15_dma_ctx *dma_ctx;
+	struct device_node *np = dev->of_node;
+	const struct isp_wrapper_config *isp_wrapper_config = NULL;
 	int ret;
 
 	ret = hailo15_media_get_endpoints_status(&pdev->dev);
 	if(ret){
 		return ret;
 	}
-	
 
 	isp_dev = devm_kzalloc(&pdev->dev, sizeof(struct hailo15_isp_device),
 				   GFP_KERNEL);
@@ -1428,6 +1501,23 @@ static int hailo15_isp_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	isp_dev->dev = dev;
+
+	if (np) {
+		const struct of_device_id *match;
+
+		match = of_match_node(hailo15_isp_of_match, np);
+		if (match && match->data) {
+			isp_wrapper_config = match->data;
+		}
+	}
+
+	if (!isp_wrapper_config) {
+		dev_err(&pdev->dev, "isp_wrapper_config is NULL\n");
+		goto err_init_isp_dev;
+	}
+
+	isp_dev->wrapper_cfg = isp_wrapper_config;
+
 	platform_set_drvdata(pdev, isp_dev);
 
 	ret = hailo15_init_isp_device(isp_dev);
@@ -1472,6 +1562,8 @@ static int hailo15_isp_probe(struct platform_device *pdev)
 	}
 
 	INIT_WORK(&isp_dev->af_w, hailo15_isp_handle_afm_int);
+
+	atomic_set(&isp_dev->streaming_started, 0);
 	
 	hailo15_fe_get_dev(&isp_dev->fe_dev);
 	hailo15_fe_set_address_space_base(isp_dev->fe_dev, isp_dev->base);
@@ -1694,22 +1786,43 @@ void frame_timeout_handler(struct timer_list *t) {
 		return;
 	}
 	if (!atomic_read(&isp_dev->frame_received)) {
-		pr_warn("%s - no frame received, possible disconnection\n", __func__);
+		// if the transition is from streaming to no frame received -
+		// send dataloss stat and reset the streaming_started flag
+		if (atomic_cmpxchg(&isp_dev->streaming_started, 1, 0)) {
+			pr_warn("%s - no frame received, possible disconnection\n", __func__);
 
-		// Send dataloss stat for all sensors - only subscribed sensors will be processed
-		for (pad = HAILO15_ISP_SINK_PAD_MAX; pad < HAILO15_ISP_SOURCE_PAD_MAX; ++pad) {
+			// Send dataloss stat for all sensors - only subscribed sensors will be processed
+			for (pad = HAILO15_ISP_SINK_PAD_MAX; pad < HAILO15_ISP_SOURCE_PAD_MAX; ++pad) {
 
-			// match the sensor mask to the pad - assumes the first pad is sensor 0 and so on
-			sensor_mask = ISP_MIS_SENSOR_DATALOSS_LAST_BIT >> (pad - HAILO15_ISP_SINK_PAD_MAX);
-			if(hailo15_process_sensor_dataloss_stat_sub(isp_dev, pad, sensor_mask)) {
-				pr_err("%s - failed to send dataloss stat for pad %d and sensor mask 0x%x\n",
-				__func__, pad, sensor_mask);
+				// match the sensor mask to the pad - assumes the first pad is sensor 0 and so on
+				sensor_mask = ISP_MIS_SENSOR_DATALOSS_LAST_BIT >> (pad - HAILO15_ISP_SINK_PAD_MAX);
+				if(hailo15_process_sensor_dataloss_stat_sub(isp_dev, pad, sensor_mask)) {
+					pr_err("%s - failed to send dataloss stat for pad %d and sensor mask 0x%x\n",
+					__func__, pad, sensor_mask);
+				}
 			}
 		}
-	}
-	// Reset frame_received for the next interval
-	atomic_set(&isp_dev->frame_received, 0);
+	} else {
+		// if the transition is from not streaming to frame received -
+		// send stream stat and set the streaming_started flag
+		if (!atomic_cmpxchg(&isp_dev->streaming_started, 0, 1)) {
 
+			// Send stream stat for all sensors - only subscribed sensors will be processed
+			for (pad = HAILO15_ISP_SINK_PAD_MAX; pad < HAILO15_ISP_SOURCE_PAD_MAX; ++pad) {
+				if(hailo15_process_isp_pad_stat_sub(isp_dev, pad, 1,
+					HAILO15_UEVENT_SENSOR_STREAMING_STAT, 1)) {
+					pr_err("%s - failed to send stream stat for pad %d\n",
+					__func__, pad);
+				}
+			}
+
+		}
+
+		// Reset frame_received for the next interval
+		atomic_set(&isp_dev->frame_received, 0);
+	}
+
+	// Restart the timer
 	mod_timer(&isp_dev->frame_timer, jiffies + msecs_to_jiffies(FRAME_TIMEOUT_MS));
 }
 
@@ -1742,15 +1855,6 @@ static const struct dev_pm_ops hailo15_isp_pm_ops = {
 		SET_RUNTIME_PM_OPS(isp_runtime_suspend, isp_runtime_resume,
 				   NULL)
 };
-
-static const struct of_device_id hailo15_isp_of_match[] = {
-	{
-		.compatible = "hailo,isp",
-	},
-	{ /* sentinel */ },
-};
-
-MODULE_DEVICE_TABLE(of, hailo15_isp_of_match);
 
 static struct platform_driver
 	hailo15_isp_driver = { .probe = hailo15_isp_probe,

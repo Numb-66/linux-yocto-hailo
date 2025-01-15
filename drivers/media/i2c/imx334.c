@@ -198,7 +198,8 @@ struct imx334_mode {
  * @pclk_ctrl: Pointer to pixel clock control
  * @hblank_ctrl: Pointer to horizontal blanking control
  * @vblank_ctrl: Pointer to vertical blanking control
- * @test_pattern_ctrl pointer to test pattern control
+ * @test_pattern_ctrl: pointer to test pattern control
+ * @mode_sel_ctrl: pointer to mode select control
  * @exp_ctrl: Pointer to exposure control
  * @again_ctrl: Pointer to analog gain control
  * @vblank: Vertical blanking in lines
@@ -219,6 +220,7 @@ struct imx334 {
 	struct v4l2_ctrl *hblank_ctrl;
 	struct v4l2_ctrl *vblank_ctrl;
 	struct v4l2_ctrl *test_pattern_ctrl;
+	struct v4l2_ctrl *mode_sel_ctrl;
 	struct v4l2_ctrl *hflip_ctrl;
 	struct v4l2_ctrl *vflip_ctrl;
 	struct {
@@ -702,6 +704,7 @@ out:
  * - cluster controls:
  *   - V4L2_CID_ANALOGUE_GAIN
  *   - V4L2_CID_EXPOSURE
+ * - V4L2_CID_WIDE_DYNAMIC_RANGE (true value not supported, only for compatibility)
  *
  * Return: 0 if successful, error code otherwise.
  */
@@ -752,6 +755,21 @@ static int imx334_set_ctrl(struct v4l2_ctrl *ctrl)
 
 		pm_runtime_put(imx334->dev);
 
+		break;
+	case V4L2_CID_WIDE_DYNAMIC_RANGE:		
+		if (ctrl->val) {
+			// Not supported yet
+			dev_err(imx334->dev, "V4L2_CID_WIDE_DYNAMIC_RANGE is not supported\n");
+			return -EINVAL;
+		}
+		
+		if (imx334->streaming) {
+			dev_warn(imx334->dev, "Cannot set WDR mode while streaming\n");
+			return 0;
+		}
+
+		dev_dbg(imx334->dev, "hdr enable set to %d\n", ctrl->val);
+		ret = 0;
 		break;
 	case V4L2_CID_HFLIP:
 		if (!pm_runtime_get_if_in_use(imx334->dev))
@@ -1364,6 +1382,9 @@ static int imx334_init_controls(struct imx334 *imx334)
 				     V4L2_CID_TEST_PATTERN,
 				     ARRAY_SIZE(imx334_test_pattern_menu) - 1,
 				     0, 0, imx334_test_pattern_menu);
+
+	imx334->mode_sel_ctrl = v4l2_ctrl_new_std(ctrl_hdlr, &imx334_ctrl_ops,
+				V4L2_CID_WIDE_DYNAMIC_RANGE, 0, 1, 1, 0);
 
 	imx334->hflip_ctrl = v4l2_ctrl_new_std(ctrl_hdlr,
 						&imx334_ctrl_ops,

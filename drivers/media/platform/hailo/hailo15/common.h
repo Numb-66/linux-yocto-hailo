@@ -468,18 +468,25 @@ struct hailo15_subdev_list {
 	struct v4l2_subdev *subdev;
 };
 
+struct hailo15_mux_isp_stream_cfg {
+    unsigned int enable;
+    unsigned int vc;
+    unsigned int dt;
+};
+
 struct hailo15_mux_cfg {
 	unsigned int pixel_mux_cfg;
-	unsigned int isp0_stream0;
-	unsigned int isp0_stream1;
-	unsigned int isp0_stream2;
-	unsigned int isp1_stream0;
-	unsigned int isp1_stream1;
-	unsigned int isp1_stream2;
+	struct hailo15_mux_isp_stream_cfg isp0_stream0;
+	struct hailo15_mux_isp_stream_cfg isp0_stream1;
+	struct hailo15_mux_isp_stream_cfg isp0_stream2;
+	struct hailo15_mux_isp_stream_cfg isp1_stream0;
+	struct hailo15_mux_isp_stream_cfg isp1_stream1;
+	struct hailo15_mux_isp_stream_cfg isp1_stream2;
 	unsigned int vision_buffer_ready_ap_int_mask;
 };
 
 struct hailo15_mux_interrupt_cfg {
+	unsigned int pixel_mux_vsync_mask;
 	unsigned int vision_subsys_asf_int_mask;
 	unsigned int vision_asf_int_fatal_mask;
 	unsigned int vision_asf_int_nonfatal_mask;

@@ -76,6 +76,13 @@
 #define IMX678_WDR_STEP 1
 #define IMX678_WDR_DEFAULT 0
 
+/* Hcg control */
+#define IMX678_REG_HCG 0x3030
+#define IMX678_HCG_MIN 0
+#define IMX678_HCG_MAX 1
+#define IMX678_HCG_STEP 1
+#define IMX678_HCG_DEFAULT 0
+
 /* Group hold register */
 #define IMX678_REG_HOLD 0x3001
 
@@ -223,6 +230,7 @@ struct imx678_mode {
 	u32 link_freq_idx;
 	u32 rhs1;
 	u32 rhs2;
+	u8 dol;
 	struct imx678_reg_list reg_list;
 	struct v4l2_fract frame_interval;
 };
@@ -288,6 +296,7 @@ struct imx678 {
 	struct v4l2_ctrl *hmax_ctrl;
 	struct v4l2_ctrl *test_pattern_ctrl;
 	struct v4l2_ctrl *mode_sel_ctrl;
+	struct v4l2_ctrl *hcg_ctrl;
 	struct exp_gain_ctrl_cluster lef;
 	struct exp_gain_ctrl_cluster sef1;
 	struct exp_gain_ctrl_cluster sef2;
@@ -1291,8 +1300,8 @@ static const struct imx678_reg mode_4k_2dol_all_pixel[] = {
 	{ 0x3058, 0x4A }, /* SHR2[19:0] */
 	{ 0x3059, 0x00 },
 	/* 0x305A: Using default value */
-	{ 0x3060, 0xcd }, /* RHS1[19:0] */
-	{ 0x3061, 0x05 },
+	{ 0x3060, 0xa3 }, /* RHS1[19:0] */
+	{ 0x3061, 0x00 },
 	/* 0x3062: Using default value */
 	{ 0x3064, 0x53 }, /* RHS2[19:0] */
 	{ 0x3065, 0x00 },
@@ -2537,6 +2546,7 @@ static const struct imx678_mode supported_sdr_modes[] = {
 	.pclk = 594000000,
 	.link_freq_idx = 0,
 	.code = MEDIA_BUS_FMT_SRGGB12_1X12,
+	.dol = 1,
 	.reg_list = {
 		.num_of_regs = ARRAY_SIZE(mode_3840x2160_regs),
 		.regs = mode_3840x2160_regs,
@@ -2558,6 +2568,7 @@ static const struct imx678_mode supported_sdr_modes[] = {
 	.pclk = 594000000,
 	.link_freq_idx = 0,
 	.code = MEDIA_BUS_FMT_SRGGB12_1X12,
+	.dol = 1,
 	.reg_list = {
 		.num_of_regs = ARRAY_SIZE(mode_3840x2160_regs),
 		.regs = mode_3840x2160_regs,
@@ -2579,6 +2590,7 @@ static const struct imx678_mode supported_sdr_modes[] = {
 	.pclk = 594000000,
 	.link_freq_idx = 0,
 	.code = MEDIA_BUS_FMT_SRGGB12_1X12,
+	.dol = 1,
 	.reg_list = {
 		.num_of_regs = ARRAY_SIZE(mode_1920x1080_sdr_binning_regs),
 		.regs = mode_1920x1080_sdr_binning_regs,
@@ -2598,10 +2610,12 @@ static const struct imx678_mode supported_hdr_modes[] = {
     .vblank = 90,
     .vblank_min = 90,
     .vblank_max = 132840,
-	.rhs1 = 0x5cd,
+    .rhs1 = 0xa3,
+    .rhs2 = 0x0,
     .pclk = 594000000,
     .link_freq_idx = 0,
     .code = MEDIA_BUS_FMT_SRGGB12_2X12,
+    .dol = 2,
     .reg_list = {
         .num_of_regs = ARRAY_SIZE(mode_4k_2dol_all_pixel),
         .regs = mode_4k_2dol_all_pixel,
@@ -2623,6 +2637,7 @@ static const struct imx678_mode supported_hdr_modes[] = {
     .pclk = 594000000,
     .link_freq_idx = 0,
     .code = MEDIA_BUS_FMT_SRGGB12_3X12,
+    .dol = 3,
     .reg_list = {
         .num_of_regs = ARRAY_SIZE(mode_4k_3dol_all_pixel),
         .regs = mode_4k_3dol_all_pixel,
@@ -2644,6 +2659,7 @@ static const struct imx678_mode supported_hdr_modes[] = {
     .pclk = 594000000,
     .link_freq_idx = 0,
     .code = MEDIA_BUS_FMT_SRGGB12_3X12,
+    .dol = 3,
     .reg_list = {
         .num_of_regs = ARRAY_SIZE(mode_4k_3dol_20fps_all_pixel),
         .regs = mode_4k_3dol_20fps_all_pixel,
@@ -2666,6 +2682,7 @@ static const struct imx678_mode supported_hdr_modes[] = {
 	.pclk = 594000000,
 	.link_freq_idx = 0,
 	.code = MEDIA_BUS_FMT_SRGGB12_3X12,
+	.dol = 3,
 	.reg_list = {
 		.num_of_regs = ARRAY_SIZE(mode_1920x1080_3dol_binning_20fps_regs),
 		.regs = mode_1920x1080_3dol_binning_20fps_regs,
@@ -2677,7 +2694,7 @@ static const struct imx678_mode supported_hdr_modes[] = {
 	},
 };
 
-struct v4l2_ctrl_config imx678_3dol_ctrls[] = {
+struct v4l2_ctrl_config imx678_custom_ctrls[] = {
 	{
 		.ops = &imx678_ctrl_ops,
 		.id = IMX678_CID_ANALOGUE_GAIN_SHORT,
@@ -2715,6 +2732,17 @@ struct v4l2_ctrl_config imx678_3dol_ctrls[] = {
 		.flags = V4L2_CTRL_FLAG_UPDATE,
 		.name = "exposure_very_short",
 		.step = IMX678_EXPOSURE_VERY_SHORT_STEP,
+	},
+	{
+	.ops = &imx678_ctrl_ops,
+	.id = IMX678_CID_HCG,
+	.type = V4L2_CTRL_TYPE_BOOLEAN,
+	.flags = V4L2_CTRL_FLAG_UPDATE,
+	.name = "hcg",
+	.step = IMX678_HCG_STEP,
+	.min = IMX678_HCG_MIN,
+	.max = IMX678_HCG_MAX,
+	.def = IMX678_HCG_DEFAULT,
 	},
 	{
 		.ops = &imx678_get_ctrl_ops,
@@ -2786,16 +2814,45 @@ static void convert_v4l2_subdev_code_to_sensor_code(struct imx678* imx678, struc
 	}	
 }
 
-static int get_3dol_ctrl_index_by_name(const char *name)
-{
+static struct v4l2_ctrl_config *get_custom_ctrl_by_id(u32 id) {
 	int i;
 
-	for (i = 0; i < ARRAY_SIZE(imx678_3dol_ctrls); i++) {
-		if (!strcmp(imx678_3dol_ctrls[i].name, name))
-			return i;
+	for (i = 0; i < ARRAY_SIZE(imx678_custom_ctrls); i++) {
+		if (imx678_custom_ctrls[i].id == id)
+			return &imx678_custom_ctrls[i];
 	}
 
-	return -EINVAL;
+	pr_err("Invalid control id: %d\n", id);
+	return NULL;
+}
+
+static void imx678_setup_custom_ctrl(struct imx678 *imx678, struct v4l2_ctrl **ctrl, u32 id) {
+	struct v4l2_ctrl_config *config = get_custom_ctrl_by_id(id);
+
+	if (!config) {
+		dev_err(imx678->dev, "Setup invalid custom control id: %d\n", id);
+		return;
+	}
+
+	*ctrl = v4l2_ctrl_new_custom(&imx678->ctrl_handler, config, NULL);
+}
+
+static void imx678_setup_custom_ctrl_limits(
+	struct imx678 *imx678, struct v4l2_ctrl **ctrl, u32 id,
+	s64 min, s64 max, s64 def)
+{
+	struct v4l2_ctrl_config *config = get_custom_ctrl_by_id(id);
+
+	if (!config) {
+		dev_err(imx678->dev, "Setup invalid custom control id: %d\n", id);
+		return;
+	}
+
+	config->min = min;
+	config->max = max;
+	config->def = def;
+	
+	*ctrl = v4l2_ctrl_new_custom(&imx678->ctrl_handler, config, NULL);
 }
 
 /**
@@ -2933,13 +2990,12 @@ typedef struct ExposureLimits_t {
 } * ExposureLimits;
 
 void calculate_exposure_limits(struct imx678* imx678, ExposureLimits limits) {
-	const int hdr_multiple = imx678->hdr_enabled ? 3 : 1;
 	const int rhs1 = imx678->cur_mode->rhs1 > 0 ? imx678->cur_mode->rhs1 : IMX678_DEFAULT_RHS1;
 	const int rhs2 = imx678->cur_mode->rhs2 > 0 ? imx678->cur_mode->rhs2 : IMX678_DEFAULT_RHS2;
 	u32 shr0, shr1, shr2;
-	limits->lpfr = hdr_multiple * (imx678->vblank + imx678->cur_mode->height);
-	limits->min_lpfr = hdr_multiple * (imx678->cur_mode->vblank_min + imx678->cur_mode->height);
-	limits->max_lpfr = hdr_multiple * (imx678->cur_mode->vblank_max + imx678->cur_mode->height);
+	limits->lpfr = imx678->cur_mode->dol * (imx678->vblank + imx678->cur_mode->height);
+	limits->min_lpfr = imx678->cur_mode->dol * (imx678->cur_mode->vblank_min + imx678->cur_mode->height);
+	limits->max_lpfr = imx678->cur_mode->dol * (imx678->cur_mode->vblank_max + imx678->cur_mode->height);
 
 	limits->lef_reg = IMX678_REG_SHUTTER;
 	limits->shr0_min = imx678->hdr_enabled ? imx678->cur_mode->rhs2 + IMX678_SHR0_RHS2_GAP : IMX678_SHR0_FSC_GAP;
@@ -3008,21 +3064,56 @@ static int imx678_update_exp_vblank_controls(struct imx678* imx678)
 
 	ret = __v4l2_ctrl_modify_range(imx678->lef.exp_ctrl, limits.exp_lef_min, 
 		limits.exp_lef_max, IMX678_EXPOSURE_STEP, limits.exp_lef_default);
-	if (ret)
+	if (ret) {
+		dev_err(imx678->dev, "Failed to modify LEF exposure range. "
+							 "ret=%d. min=%d, max=%d, default=%d",
+							 ret, limits.exp_lef_min, limits.exp_lef_max, limits.exp_lef_default);
 		return ret;
+	}
 
-	ret = __v4l2_ctrl_modify_range(imx678->sef1.exp_ctrl, limits.exp_sef1_min, 
-		limits.exp_sef1_max, IMX678_EXPOSURE_SHORT_STEP, limits.exp_sef1_default);
-	if (ret)
-		return ret;
+	if (imx678->cur_mode->dol >= 2) {
+		ret = __v4l2_ctrl_modify_range(imx678->sef1.exp_ctrl, limits.exp_sef1_min, 
+			limits.exp_sef1_max, IMX678_EXPOSURE_SHORT_STEP, limits.exp_sef1_default);
+		if (ret) {
+			dev_err(imx678->dev, "Failed to modify SEF1 exposure range. "
+								"ret=%d. min=%d, max=%d, default=%d",
+								ret, limits.exp_sef1_min, limits.exp_sef1_max, limits.exp_sef1_default);
+			return ret;
+		}
+	}
 
-	ret = __v4l2_ctrl_modify_range(imx678->sef2.exp_ctrl, limits.exp_sef2_min, 
-		limits.exp_sef2_max, IMX678_EXPOSURE_VERY_SHORT_STEP, limits.exp_sef2_default);
-	if (ret)
+	if (imx678->cur_mode->dol >= 3) {
+		ret = __v4l2_ctrl_modify_range(imx678->sef2.exp_ctrl, limits.exp_sef2_min, 
+			limits.exp_sef2_max, IMX678_EXPOSURE_VERY_SHORT_STEP, limits.exp_sef2_default);
+		if (ret) {
+			dev_err(imx678->dev, "Failed to modify SEF2 exposure range. "
+								"ret=%d. min=%d, max=%d, default=%d",
+								ret, limits.exp_sef2_min, limits.exp_sef2_max, limits.exp_sef2_default);
+			return ret;
+		}
+	}
+
+	ret = __v4l2_ctrl_s_ctrl(imx678->vblank_ctrl, imx678->vblank);
+	if (ret) {
+		dev_err(imx678->dev, "Failed to set vblank to %d. ret=%d", imx678->vblank, ret);
 		return ret;
-	return __v4l2_ctrl_s_ctrl(imx678->vblank_ctrl, imx678->vblank);
+	}
+
+	return 0;
 }
+static int imx678_set_hcg_mode(struct imx678 *imx678, u32 hcg)
+{
+	int ret;
+	ret = imx678_write_reg(imx678, IMX678_REG_HCG, 1, hcg);
+	if (ret) {
+        dev_err(imx678->dev, "Failed to write HCG register: %d\n", ret);
+        return ret;
+    }
 
+    dev_dbg(imx678->dev, "HCG mode set to %s\n", hcg ? "enabled" : "disabled");
+    
+	return 0;
+}
 /**
  * imx678_update_exp_gain() - Set updated exposure and gain
  * @imx678: pointer to imx678 device
@@ -3036,7 +3127,6 @@ static int imx678_update_exp_gain(struct imx678 *imx678, u32 exposure, u32 gain,
 {
 	u32 lpfr, shutter;
 	int ret;
-	int hdr_multiple = imx678->hdr_enabled ? 3 : 1;
 	int gap;
 
 	switch (exposure_type) {
@@ -3044,14 +3134,14 @@ static int imx678_update_exp_gain(struct imx678 *imx678, u32 exposure, u32 gain,
 			gap = imx678->hdr_enabled ? imx678->cur_mode->rhs2 + IMX678_SHR0_RHS2_GAP : IMX678_SHR0_FSC_GAP;
 
 			// If the vblank is too small to fit the requested exposure, increase vblank
-			if (exposure > hdr_multiple * (imx678->vblank + imx678->cur_mode->height) - gap) {
-				imx678->vblank = exposure - hdr_multiple * (imx678->cur_mode->height) + gap;
+			if (exposure > imx678->cur_mode->dol * (imx678->vblank + imx678->cur_mode->height) - gap) {
+				imx678->vblank = exposure - imx678->cur_mode->dol * (imx678->cur_mode->height) + gap;
 				__v4l2_ctrl_s_ctrl(imx678->vblank_ctrl, imx678->vblank);
 			}
 
 			lpfr = imx678->vblank + imx678->cur_mode->height;
 			lpfr += lpfr % 2; // LPFR must be even
-			shutter = NON_NEGATIVE(hdr_multiple * (int)lpfr - (int)exposure);
+			shutter = NON_NEGATIVE(imx678->cur_mode->dol * (int)lpfr - (int)exposure);
 			break;
 		}
 		case (SEF1): {
@@ -3115,10 +3205,75 @@ static int imx678_set_test_pattern(struct imx678 *imx678, int val)
 	return ret;
 }
 
+static void imx678_set_mode(struct imx678 *imx678, const struct imx678_mode *mode)
+{
+	imx678->cur_mode = mode;
+	imx678->vblank = mode->vblank;
+
+	if (imx678->hdr_enabled) {
+		if (mode->dol <= 1)
+			dev_err(imx678->dev, "Set to invalid HDR mode with DOL %d", mode->dol);
+	} else {
+		if (mode->dol > 1)
+			dev_err(imx678->dev, "Set to invalid SDR mode with DOL %d", mode->dol);
+	}
+}
+
+static void imx678_set_exp_activity(struct imx678 *imx678)
+{
+	int dol = imx678->cur_mode->dol;
+	bool sef1, sef2;
+
+	sef1 = dol >= 2;
+	sef2 = dol >= 3;
+
+	v4l2_ctrl_activate(imx678->sef1.again_ctrl, sef1);
+	v4l2_ctrl_activate(imx678->sef1.exp_ctrl, sef1);
+
+	v4l2_ctrl_activate(imx678->sef2.again_ctrl, sef2);
+	v4l2_ctrl_activate(imx678->sef2.exp_ctrl, sef2);
+}
+
+static int imx678_set_hdr_mode(struct imx678 *imx678, bool enable)
+{
+	const struct imx678_mode *prev_mode = NULL;
+	int ret, revert_ret;
+
+	ret = 0;
+	if (imx678->hdr_enabled != enable) {
+		imx678->hdr_enabled = enable;
+		prev_mode = imx678->cur_mode;
+
+		imx678_set_mode(imx678, imx678->hdr_enabled ? 
+								&supported_hdr_modes[DEFAULT_MODE_IDX] :
+								&supported_sdr_modes[DEFAULT_MODE_IDX]);
+
+		ret = imx678_update_exp_vblank_controls(imx678);
+		if (ret) {
+			dev_warn(imx678->dev, "Failed to update exp controls, trying to revert to previous mode\n");
+
+			imx678->hdr_enabled = !imx678->hdr_enabled;
+			imx678_set_mode(imx678, prev_mode);
+
+			revert_ret = imx678_update_exp_vblank_controls(imx678);
+			if (revert_ret)
+				dev_err(imx678->dev, "Failed to revert to previous mode (hdr_enabled back to %d, ret=%d)\n",
+					 imx678->hdr_enabled, revert_ret);
+		}
+
+		dev_dbg(imx678->dev, "Set HDR mode to %d", imx678->hdr_enabled);
+		imx678_set_exp_activity(imx678);
+	}
+
+	return ret;
+}
+
 static int imx678_get_ctrl(struct v4l2_ctrl *ctrl)
 {
-	int ret = 0;
 	struct imx678 *imx678 = container_of(ctrl->handler, struct imx678, ctrl_handler);
+	u16 reg = 0;
+	u32 len = 0;
+	int ret = 0;
 
 	switch (ctrl->id) {
 	case IMX678_CID_RHS1:
@@ -3128,23 +3283,39 @@ static int imx678_get_ctrl(struct v4l2_ctrl *ctrl)
 		ctrl->val = imx678->cur_mode->rhs2;
 		break;
 	case IMX678_CID_SHR0:
-		ret = imx678_read_reg(imx678, IMX678_REG_SHUTTER, 3, &ctrl->val);
+		reg = IMX678_REG_SHUTTER;
+		len = 3;
 		break;
 	case IMX678_CID_SHR1:
-		ret = imx678_read_reg(imx678, IMX678_REG_SHUTTER_SHORT, 3, &ctrl->val);
+		reg = IMX678_REG_SHUTTER_SHORT;
+		len = 3;
 		break;
 	case IMX678_CID_SHR2:
-		ret = imx678_read_reg(imx678, IMX678_REG_SHUTTER_VERY_SHORT, 3, &ctrl->val);
+		reg = IMX678_REG_SHUTTER_VERY_SHORT;
+		len = 3;
 		break;
 	case IMX678_CID_VMAX:
-		ret = imx678_read_reg(imx678, IMX678_REG_LPFR, 3, &ctrl->val);
+		reg = IMX678_REG_LPFR;
+		len = 3;
 		break;
 	case IMX678_CID_HMAX:
-		ret = imx678_read_reg(imx678, IMX678_REG_HMAX, 2, &ctrl->val);
+		reg = IMX678_REG_HMAX;
+		len = 2;
 		break;
 	default:
 		dev_err(imx678->dev, "Invalid control %d", ctrl->id);
 		return -EINVAL;
+	}
+
+	if (reg && len) {
+		if (!imx678->streaming) {
+			dev_warn(imx678->dev, "Cannot read register 0x%x from sensor while not streaming\n", reg);
+			return -EBUSY;
+		}
+
+		ret = imx678_read_reg(imx678, reg, len, &ctrl->val);
+		if (ret)
+			dev_err(imx678->dev, "Failed to read register %d", reg);
 	}
 
 	return ret;
@@ -3168,24 +3339,22 @@ static int imx678_set_ctrl(struct v4l2_ctrl *ctrl)
 	struct imx678 *imx678 =
 		container_of(ctrl->handler, struct imx678, ctrl_handler);
 	u32 analog_gain, exposure, lpfr, max_lpfr;
-	int hdr_multiple = imx678->hdr_enabled ? 3 : 1;
 	int ret;
 
 	switch (ctrl->id) {
 	case V4L2_CID_VBLANK:
 		imx678->vblank = imx678->vblank_ctrl->val;
-		max_lpfr = (imx678->cur_mode->vblank_max + imx678->cur_mode->height) * hdr_multiple;
-		lpfr = (imx678->vblank + imx678->cur_mode->height) * hdr_multiple;
+		max_lpfr = (imx678->cur_mode->vblank_max + imx678->cur_mode->height) * imx678->cur_mode->dol;
+		lpfr = (imx678->vblank + imx678->cur_mode->height) * imx678->cur_mode->dol;
 
 		dev_dbg(imx678->dev, "Received vblank %u, new lpfr %u",
 			imx678->vblank, lpfr);
 		ret = __v4l2_ctrl_modify_range(
-            imx678->lef.exp_ctrl, IMX678_SHR0_FSC_GAP,
-            max_lpfr - imx678->cur_mode->rhs2 - IMX678_SHR0_RHS2_GAP,
-            IMX678_EXPOSURE_STEP, lpfr - imx678->cur_mode->rhs2 - IMX678_SHR0_RHS2_GAP);
+			imx678->lef.exp_ctrl, IMX678_SHR0_FSC_GAP,
+			max_lpfr - imx678->cur_mode->rhs2 - IMX678_SHR0_RHS2_GAP,
+			IMX678_EXPOSURE_STEP, lpfr - imx678->cur_mode->rhs2 - IMX678_SHR0_RHS2_GAP);
 		break;
 	case V4L2_CID_EXPOSURE:
-
 		/* Set controls only if sensor is in power on state */
 		if (!pm_runtime_get_if_in_use(imx678->dev))
 			return 0;
@@ -3247,25 +3416,27 @@ static int imx678_set_ctrl(struct v4l2_ctrl *ctrl)
 		pm_runtime_put(imx678->dev);
 
 		break;
+	case IMX678_CID_HCG:
+		/* Set controls only if sensor is in power on state */
+		if (!pm_runtime_get_if_in_use(imx678->dev))
+			return 0;
+		
+		dev_dbg(imx678->dev, "Setting HCG to %u\n", ctrl->val);
+
+		ret = imx678_set_hcg_mode(imx678, ctrl->val);
+		if (ret) {
+			dev_err(imx678->dev, "Failed to set HCG mode: %d\n", ret);
+		}
+		pm_runtime_put(imx678->dev);
+    	break;
 	case V4L2_CID_WIDE_DYNAMIC_RANGE:
 		if (imx678->streaming) {
-			dev_warn(imx678->dev,
-				"Cannot set WDR mode while streaming\n");
-			return 0;
+			dev_warn(imx678->dev, "Cannot set WDR mode while streaming\n");
+			return -EBUSY;
 		}
 
-		ret = 0;
-		if (imx678->hdr_enabled != ctrl->val) {
-			imx678->hdr_enabled = ctrl->val;
-			dev_dbg(imx678->dev, "hdr enable set to %d\n", imx678->hdr_enabled);
-			imx678->cur_mode = imx678->hdr_enabled ? &supported_hdr_modes[DEFAULT_MODE_IDX] : &supported_sdr_modes[DEFAULT_MODE_IDX];
-			imx678->vblank = imx678->cur_mode->vblank;
-
-			v4l2_ctrl_activate(imx678->sef1.exp_ctrl, ctrl->val);
-			v4l2_ctrl_activate(imx678->sef2.exp_ctrl, ctrl->val);
-			ret = imx678_update_exp_vblank_controls(imx678);
-		}
-		break;		
+		ret = imx678_set_hdr_mode(imx678, ctrl->val);
+		break;
 	default:
 		dev_err(imx678->dev, "Invalid control %d", ctrl->id);
 		ret = -EINVAL;
@@ -3471,7 +3642,8 @@ static int imx678_set_pad_format(struct v4l2_subdev *sd,
 	
 	ret = imx678_get_fmt_mode(imx678, fmt, &mode);
 	if(ret){
-		pr_err("%s - get_fmt failed with %d\n", __func__, ret);
+		pr_err("%s - get_fmt failed with %d (format: %dx%d, code: %d)\n", __func__,
+			ret, fmt->format.width, fmt->format.height, fmt->format.code);
 		goto out;
 	}
 
@@ -3479,8 +3651,7 @@ static int imx678_set_pad_format(struct v4l2_subdev *sd,
 	// even if which is V4L2_SUBDEV_FORMAT_TRY, update current format for tuning case
 	memcpy(&imx678->curr_fmt, fmt, sizeof(struct v4l2_subdev_format));
 	if (compare_imx678_mode(mode, imx678->cur_mode)) {
-		imx678->cur_mode = mode;
-		imx678->vblank = mode->vblank;
+		imx678_set_mode(imx678, mode);
 		ret = imx678_update_exp_vblank_controls(imx678);
 	}
 #ifdef IMX678_UPDATE_CONTROLS_TRY_FMT
@@ -3706,8 +3877,7 @@ static int imx678_s_frame_interval(struct v4l2_subdev *sd,
 	if (ret == 0) {
 		fi->interval = mode->frame_interval;
 		if (compare_imx678_mode(mode, imx678->cur_mode)) {
-			imx678->cur_mode = mode;
-			imx678->vblank = mode->vblank;
+			imx678_set_mode(imx678, mode);
 			ret = imx678_update_exp_vblank_controls(imx678);
 		}
 	}
@@ -3747,8 +3917,8 @@ static int imx678_detect(struct imx678 *imx678)
 		return ret;
 
 	if (val != SENSOR_ID_IMX678) {
-        dev_info(imx678->dev,
-            "sensor is not connected: (expected %x, found %x)",
+		dev_info(imx678->dev,
+			"sensor is not connected: (expected %x, found %x)",
 			SENSOR_ID_IMX678, val);
 		return -ENXIO;
 	}
@@ -3920,10 +4090,9 @@ static int imx678_init_controls(struct imx678 *imx678)
 	struct v4l2_ctrl_handler *ctrl_hdlr = &imx678->ctrl_handler;
 	const struct imx678_mode *mode = imx678->cur_mode;
 	struct ExposureLimits_t limits;
-	int ctrl_3dol_idx = 0;
 	int ret;
 
-	const int num_ctrls = 11;
+	const int num_ctrls = 12;
 	ret = v4l2_ctrl_handler_init(ctrl_hdlr, num_ctrls);
 	if (ret)
 		return ret;
@@ -3949,58 +4118,30 @@ static int imx678_init_controls(struct imx678 *imx678)
 	v4l2_ctrl_cluster(2, &imx678->lef.exp_ctrl);
 
 	/* Initialize exposure and gain SEF1 */
-	ctrl_3dol_idx = get_3dol_ctrl_index_by_name("exposure_short");
-	imx678_3dol_ctrls[ctrl_3dol_idx].min = limits.exp_sef1_min;
-	imx678_3dol_ctrls[ctrl_3dol_idx].max = limits.exp_sef1_max;
-	imx678_3dol_ctrls[ctrl_3dol_idx].def = limits.exp_sef1_default;
-	
-	imx678->sef1.exp_ctrl =
-		v4l2_ctrl_new_custom(ctrl_hdlr,
-				     &imx678_3dol_ctrls[ctrl_3dol_idx], NULL);
-	
-	ctrl_3dol_idx = get_3dol_ctrl_index_by_name("analogue_gain_short");
-	imx678->sef1.again_ctrl = v4l2_ctrl_new_custom(ctrl_hdlr,
-				     &imx678_3dol_ctrls[ctrl_3dol_idx], NULL);
-	
+	imx678_setup_custom_ctrl_limits(imx678, &imx678->sef1.exp_ctrl, IMX678_CID_EXPOSURE_SHORT,
+		limits.exp_sef1_min, limits.exp_sef1_max, limits.exp_sef1_default);
+	imx678_setup_custom_ctrl(imx678, &imx678->sef1.again_ctrl, IMX678_CID_ANALOGUE_GAIN_SHORT);
 	v4l2_ctrl_cluster(2, &imx678->sef1.exp_ctrl);
 
 	/* Initialize exposure and gain SEF2 */
-	ctrl_3dol_idx = get_3dol_ctrl_index_by_name("exposure_very_short");
-	imx678_3dol_ctrls[ctrl_3dol_idx].min = limits.exp_sef2_min;
-	imx678_3dol_ctrls[ctrl_3dol_idx].max = limits.exp_sef2_max;
-	imx678_3dol_ctrls[ctrl_3dol_idx].def = limits.exp_sef2_default;
-	
-	imx678->sef2.exp_ctrl =
-		v4l2_ctrl_new_custom(ctrl_hdlr, &imx678_3dol_ctrls[ctrl_3dol_idx], NULL);
-	
-	ctrl_3dol_idx = get_3dol_ctrl_index_by_name("analogue_gain_very_short");
-	imx678->sef2.again_ctrl = v4l2_ctrl_new_custom(ctrl_hdlr,
-				     &imx678_3dol_ctrls[ctrl_3dol_idx], NULL);
-	
+	imx678_setup_custom_ctrl_limits(imx678, &imx678->sef2.exp_ctrl, IMX678_CID_EXPOSURE_VERY_SHORT,
+		limits.exp_sef2_min, limits.exp_sef2_max, limits.exp_sef2_default);
+	imx678_setup_custom_ctrl(imx678, &imx678->sef2.again_ctrl, IMX678_CID_ANALOGUE_GAIN_VERY_SHORT);
 	v4l2_ctrl_cluster(2, &imx678->sef2.exp_ctrl);
 
-	// Read only HDR regs
-	ctrl_3dol_idx = get_3dol_ctrl_index_by_name("readout_timing_short");
-	imx678->rhs1_ctrl = v4l2_ctrl_new_custom(ctrl_hdlr, &imx678_3dol_ctrls[ctrl_3dol_idx], NULL);
+	/* Read only HDR custom controls */
+	imx678_setup_custom_ctrl(imx678, &imx678->rhs1_ctrl, IMX678_CID_RHS1);
+	imx678_setup_custom_ctrl(imx678, &imx678->rhs2_ctrl, IMX678_CID_RHS2);
+	imx678_setup_custom_ctrl(imx678, &imx678->shr0_ctrl, IMX678_CID_SHR0);
+	imx678_setup_custom_ctrl(imx678, &imx678->shr1_ctrl, IMX678_CID_SHR1);
+	imx678_setup_custom_ctrl(imx678, &imx678->shr2_ctrl, IMX678_CID_SHR2);
+	
+	/* Other read only custom controls */
+	imx678_setup_custom_ctrl(imx678, &imx678->vmax_ctrl, IMX678_CID_VMAX);
+	imx678_setup_custom_ctrl(imx678, &imx678->hmax_ctrl, IMX678_CID_HMAX);
 
-	ctrl_3dol_idx = get_3dol_ctrl_index_by_name("readout_timing_very_short");
-	imx678->rhs2_ctrl = v4l2_ctrl_new_custom(ctrl_hdlr, &imx678_3dol_ctrls[ctrl_3dol_idx], NULL);
-
-	ctrl_3dol_idx = get_3dol_ctrl_index_by_name("shutter_timing_long");
-	imx678->shr0_ctrl = v4l2_ctrl_new_custom(ctrl_hdlr, &imx678_3dol_ctrls[ctrl_3dol_idx], NULL);
-
-	ctrl_3dol_idx = get_3dol_ctrl_index_by_name("shutter_timing_short");
-	imx678->shr1_ctrl = v4l2_ctrl_new_custom(ctrl_hdlr, &imx678_3dol_ctrls[ctrl_3dol_idx], NULL);
-
-	ctrl_3dol_idx = get_3dol_ctrl_index_by_name("shutter_timing_very_short");
-	imx678->shr2_ctrl = v4l2_ctrl_new_custom(ctrl_hdlr, &imx678_3dol_ctrls[ctrl_3dol_idx], NULL);
-
-	ctrl_3dol_idx = get_3dol_ctrl_index_by_name("vertical_span");
-	imx678->vmax_ctrl = v4l2_ctrl_new_custom(ctrl_hdlr, &imx678_3dol_ctrls[ctrl_3dol_idx], NULL);
-
-	ctrl_3dol_idx = get_3dol_ctrl_index_by_name("horizontal_span");
-	imx678->hmax_ctrl = v4l2_ctrl_new_custom(ctrl_hdlr, &imx678_3dol_ctrls[ctrl_3dol_idx], NULL);
-
+	/* Initialize HCG control */
+	imx678_setup_custom_ctrl(imx678, &imx678->hcg_ctrl, IMX678_CID_HCG);
 
 	imx678->vblank_ctrl =
 		v4l2_ctrl_new_std(ctrl_hdlr, &imx678_ctrl_ops, V4L2_CID_VBLANK,
@@ -4016,7 +4157,7 @@ static int imx678_init_controls(struct imx678 *imx678)
 				V4L2_CID_WIDE_DYNAMIC_RANGE, IMX678_WDR_MIN,
 				IMX678_WDR_MAX, IMX678_WDR_STEP,
 				IMX678_WDR_DEFAULT);
-
+	
 	/* Read only controls */
 	imx678->pclk_ctrl = v4l2_ctrl_new_std(ctrl_hdlr, &imx678_ctrl_ops,
 					      V4L2_CID_PIXEL_RATE, mode->pclk,
@@ -4084,16 +4225,15 @@ static int imx678_probe(struct i2c_client *client)
 	/* Check module identity */
 	ret = imx678_detect(imx678);
 	if (ret == -ENXIO) {
-        // imx678 is not connected, but another sensor might be
-        goto error_power_off;
-    } else if (ret) {
+		// imx678 is not connected, but another sensor might be
+		goto error_power_off;
+	} else if (ret) {
 		dev_err(imx678->dev, "failed to find sensor: %d", ret);
 		goto error_power_off;
 	}
 
 	/* Set default mode to max resolution sdr */
-	imx678->cur_mode = &supported_sdr_modes[DEFAULT_MODE_IDX];
-	imx678->vblank = imx678->cur_mode->vblank;
+	imx678_set_mode(imx678, &supported_sdr_modes[DEFAULT_MODE_IDX]);
 
 	ret = imx678_init_controls(imx678);
 	if (ret) {
@@ -4123,8 +4263,8 @@ static int imx678_probe(struct i2c_client *client)
 	pm_runtime_enable(imx678->dev);
 	pm_runtime_idle(imx678->dev);
 
-    dev_info(imx678->dev, "probe finished successfully");
-    return 0;
+	dev_info(imx678->dev, "probe finished successfully");
+	return 0;
 
 error_media_entity:
 	media_entity_cleanup(&imx678->sd.entity);
@@ -4135,11 +4275,11 @@ error_power_off:
 error_mutex_destroy:
 	mutex_destroy(&imx678->mutex);
 
-    if (ret == -ENXIO) {
-        dev_info(imx678->dev, "exit probe, sensor not connected");
-    } else {
-        dev_err(imx678->dev, "probe failed with %d", ret);
-    }
+	if (ret == -ENXIO) {
+		dev_info(imx678->dev, "exit probe, sensor not connected");
+	} else {
+		dev_err(imx678->dev, "probe failed with %d", ret);
+	}
 	return ret;
 }
 

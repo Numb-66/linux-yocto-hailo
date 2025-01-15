@@ -258,7 +258,7 @@ int hailo15_reqbufs(struct file *file, void *priv,
 	req.pad = pad->index;
 	req.num_buffers = p->count;
 
-	hailo15_subdev_call(vid_node, core, ioctl, ISPIOC_V4L2_REQBUFS,
+	ret = hailo15_subdev_call(vid_node, core, ioctl, ISPIOC_V4L2_REQBUFS,
 				    &req);
 	return ret;
 }
@@ -581,6 +581,8 @@ static struct vb2_ops hailo15_buffer_ops = {
 	.queue_setup = hailo15_queue_setup,
 	.buf_prepare = hailo15_buffer_prepare,
 	.buf_queue = hailo15_buffer_queue,
+	.wait_prepare = vb2_ops_wait_prepare,
+	.wait_finish = vb2_ops_wait_finish,
 };
 
 static void

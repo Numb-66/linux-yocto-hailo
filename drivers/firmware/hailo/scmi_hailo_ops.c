@@ -21,6 +21,7 @@ static int scmi_hailo_get_boot_info(struct scmi_hailo_get_boot_info_p2a *boot_in
 static int scmi_hailo_get_fuse_info(struct scmi_hailo_get_fuse_info_p2a *fuse_info);
 static int scmi_hailo_send_boot_success_ind(struct scmi_hailo_boot_success_indication_a2p *params);
 static int scmi_hailo_send_swupdate_ind(void);
+static int scmi_hailo_send_send_components_version(struct scmi_hailo_send_components_version_p2a *info);
 
 const struct scmi_hailo_ops ops = {
 	.register_notifier = scmi_hailo_register_notifier,
@@ -31,6 +32,7 @@ const struct scmi_hailo_ops ops = {
 	.stop_measure = scmi_hailo_stop_measure,
 	.send_boot_success_ind = scmi_hailo_send_boot_success_ind,
 	.send_swupdate_ind = scmi_hailo_send_swupdate_ind,
+	.send_components_version = scmi_hailo_send_send_components_version,
 };
 
 static int scmi_hailo_register_notifier(u8 evt_id, struct notifier_block *nb)
@@ -91,6 +93,11 @@ static int scmi_hailo_send_boot_success_ind(struct scmi_hailo_boot_success_indic
 static int scmi_hailo_send_swupdate_ind(void)
 {
 	return hailo_ops->send_swupdate_ind(ph);
+}
+
+static int scmi_hailo_send_send_components_version(struct scmi_hailo_send_components_version_p2a *info)
+{
+	return hailo_ops->send_components_version(ph, info);
 }
 
 int scmi_hailo_ops_init(struct scmi_device *sdev)
