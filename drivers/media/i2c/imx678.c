@@ -4157,7 +4157,6 @@ static int imx678_init_controls(struct imx678 *imx678)
 				V4L2_CID_WIDE_DYNAMIC_RANGE, IMX678_WDR_MIN,
 				IMX678_WDR_MAX, IMX678_WDR_STEP,
 				IMX678_WDR_DEFAULT);
-	
 	/* Read only controls */
 	imx678->pclk_ctrl = v4l2_ctrl_new_std(ctrl_hdlr, &imx678_ctrl_ops,
 					      V4L2_CID_PIXEL_RATE, mode->pclk,
