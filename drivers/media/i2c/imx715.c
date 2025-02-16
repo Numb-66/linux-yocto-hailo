@@ -913,16 +913,11 @@ static int imx715_set_ctrl(struct v4l2_ctrl *ctrl)
 
 		break;
 	case V4L2_CID_WIDE_DYNAMIC_RANGE:		
-<<<<<<< HEAD
         if (ctrl->val) {
             // Not supported yet
 		    dev_err(imx715->dev, "V4L2_CID_WIDE_DYNAMIC_RANGE not suppoterd yet\n");
             return -EINVAL;
         }
-=======
-		// Not supported yet
-		dev_warn(imx715->dev, "V4L2_CID_WIDE_DYNAMIC_RANGE not suppoterd yet\n");
->>>>>>> origin/1.5.2
 
 		if (imx715->streaming) {
 			dev_warn(imx715->dev,
