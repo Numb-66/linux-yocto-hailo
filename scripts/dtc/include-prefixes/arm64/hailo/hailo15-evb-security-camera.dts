@@ -91,6 +91,7 @@
 };
 
 &hailo_pci_ep_driver {
+    compatible = "hailo,hailo_pci_ep,hailo10h", "hailo,hailo_pci_ep";
     status = "okay";
 };
 

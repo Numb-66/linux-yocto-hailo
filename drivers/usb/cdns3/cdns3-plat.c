@@ -136,7 +136,18 @@ static int cdns3_plat_probe(struct platform_device *pdev)
 	if (ret)
 		goto err_phy_power_on;
 
-	cdns->gadget_init = cdns3_gadget_init;
+	// if the compatible is "cdns,usb3" then use cdns3_gadget_init
+	// if the compatible is "cdnsp,usb3" then use cdnsp_gadget_init
+	// otherwise return -EINVAL
+	if (of_device_is_compatible(dev->of_node, "cdns,usb3")) {
+		cdns->gadget_init = cdns3_gadget_init;
+	} else if (of_device_is_compatible(dev->of_node, "cdnsp,usb3")) {
+		cdns->gadget_init = cdnsp_gadget_init;
+	}else {
+		dev_err(dev, "Unknown compatible string\n");
+		ret = -EINVAL;
+		goto err_cdns_init;
+	}
 
 	ret = cdns_init(cdns);
 	if (ret)
@@ -313,7 +324,8 @@ static const struct dev_pm_ops cdns3_pm_ops = {
 #ifdef CONFIG_OF
 static const struct of_device_id of_cdns3_match[] = {
 	{ .compatible = "cdns,usb3" },
-	{ },
+	{ .compatible = "cdnsp,usb3"},
+	{},
 };
 MODULE_DEVICE_TABLE(of, of_cdns3_match);
 #endif

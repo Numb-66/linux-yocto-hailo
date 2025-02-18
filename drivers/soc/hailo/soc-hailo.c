@@ -15,6 +15,7 @@ static const struct scmi_hailo_ops *hailo_ops;
 static const struct of_device_id hailo_soc_of_match[] = {
 	{ .compatible = "hailo,hailo15" },
 	{ .compatible = "hailo,hailo15l" },
+	{ .compatible = "hailo,hailo10h2" },
 	{}
 };
 
@@ -102,7 +103,7 @@ static ssize_t boot_success_ap_software_store(struct device *dev, struct device_
 			return ret;
 		}
 	}
-	
+
 	// value == 99 indicates swupdate procedure has just completed
 	else if(val == SCMI_HAILO_BOOT_SUCCESS_SW_UPDATE)
 	{
@@ -111,7 +112,7 @@ static ssize_t boot_success_ap_software_store(struct device *dev, struct device_
 		if (ret) {
 			dev_err(dev, "Failed to send swupdate indication\n");
 			return ret;
-		}	
+		}
 	}
 
 	else

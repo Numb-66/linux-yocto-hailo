@@ -22,6 +22,8 @@
 
 #define DEFAULT_MODE_IDX 0
 
+#define CLOCK_FREQ_HZ (74250000)
+
 /* Streaming Mode */
 #define IMX678_REG_MODE_SELECT 0x3000
 #define IMX678_MODE_STANDBY 0x01
@@ -101,7 +103,8 @@
 #define IMX678_TPG_COLOR_WIDTH 0x30e4 /*color width */
 
 #define NON_NEGATIVE(val) ((val) < 0 ? 0 : (val))
-#define MAX(val1, val2) ((val1) < val2 ? val2 : (val1))
+#define MAX(val1, val2) ((val1) < (val2) ? (val2) : (val1))
+#define MIN(val1, val2) ((val1) < (val2) ? (val1) : (val2))
 
 static u32 imx678_reg_shutter[3] = {IMX678_REG_SHUTTER, IMX678_REG_SHUTTER_SHORT, IMX678_REG_SHUTTER_VERY_SHORT};
 static u32 imx678_reg_again[3] = {IMX678_REG_AGAIN, IMX678_REG_AGAIN_SHORT, IMX678_REG_AGAIN_VERY_SHORT};
@@ -1300,8 +1303,8 @@ static const struct imx678_reg mode_4k_2dol_all_pixel[] = {
 	{ 0x3058, 0x4A }, /* SHR2[19:0] */
 	{ 0x3059, 0x00 },
 	/* 0x305A: Using default value */
-	{ 0x3060, 0xa3 }, /* RHS1[19:0] */
-	{ 0x3061, 0x00 },
+	{ 0x3060, 0x1B }, /* RHS1[19:0] */
+	{ 0x3061, 0x01 },
 	/* 0x3062: Using default value */
 	{ 0x3064, 0x53 }, /* RHS2[19:0] */
 	{ 0x3065, 0x00 },
@@ -2610,7 +2613,7 @@ static const struct imx678_mode supported_hdr_modes[] = {
     .vblank = 90,
     .vblank_min = 90,
     .vblank_max = 132840,
-    .rhs1 = 0xa3,
+    .rhs1 = 0x11b,
     .rhs2 = 0x0,
     .pclk = 594000000,
     .link_freq_idx = 0,
@@ -3002,7 +3005,7 @@ void calculate_exposure_limits(struct imx678* imx678, ExposureLimits limits) {
 	limits->shr0_max = NON_NEGATIVE(limits->max_lpfr - IMX678_SHR0_FSC_GAP);
 	limits->exp_lef_min = IMX678_SHR0_FSC_GAP;
 	limits->exp_lef_max = NON_NEGATIVE(limits->max_lpfr - limits->shr0_min);
-	shr0 = _get_mode_reg_val_by_address(&imx678->cur_mode->reg_list, limits->lef_reg, 3);
+	shr0 = imx678->vblank;
 	limits->exp_lef_default = MAX(limits->exp_lef_min, NON_NEGATIVE((int)limits->lpfr - (int)shr0));
 
 	limits->sef1_reg = IMX678_REG_SHUTTER_SHORT;
@@ -3117,45 +3120,58 @@ static int imx678_set_hcg_mode(struct imx678 *imx678, u32 hcg)
 /**
  * imx678_update_exp_gain() - Set updated exposure and gain
  * @imx678: pointer to imx678 device
- * @exposure: updated exposure value
+ * @exposure_time: updated exposure time value
  * @gain: updated analog gain value
  * @exposure_type: exposure type (0: LEF, 1: SEF1, 2: SEF2)
  *
  * Return: 0 if successful, error code otherwise.
  */
-static int imx678_update_exp_gain(struct imx678 *imx678, u32 exposure, u32 gain, ExposureType exposure_type)
+static int imx678_update_exp_gain(struct imx678 *imx678, u32 exposure_time, u32 gain, ExposureType exposure_type)
 {
-	u32 lpfr, shutter;
+	u32 lpfr, shutter, desired_fps;
 	int ret;
-	int gap;
 
 	switch (exposure_type) {
 		case (LEF): {
-			gap = imx678->hdr_enabled ? imx678->cur_mode->rhs2 + IMX678_SHR0_RHS2_GAP : IMX678_SHR0_FSC_GAP;
+			// Minimum number of lines until starting exposure
+			u32 shr0_min_gap = imx678->hdr_enabled ? imx678->cur_mode->rhs2 + IMX678_SHR0_RHS2_GAP : IMX678_SHR0_FSC_GAP;
+			shr0_min_gap = MAX(shr0_min_gap, imx678->cur_mode->vblank_min);
+			
+			// The desired fps is the maximum we can get, unless this is already bigger than our stream rate.
+			// For example for sdr it's 30/60 fps (depending on mode) is the upper limit. We aim for the max value within that limit.
+			// Note that this calculation does not take into account HDR - so HDR is broken by this v4l control
+			desired_fps = (CLOCK_FREQ_HZ / imx678->cur_mode->hblank) / (exposure_time + shr0_min_gap);
+			desired_fps = MIN(desired_fps, imx678->cur_mode->frame_interval.denominator / imx678->cur_mode->frame_interval.numerator);
 
-			// If the vblank is too small to fit the requested exposure, increase vblank
-			if (exposure > imx678->cur_mode->dol * (imx678->vblank + imx678->cur_mode->height) - gap) {
-				imx678->vblank = exposure - imx678->cur_mode->dol * (imx678->cur_mode->height) + gap;
-				__v4l2_ctrl_s_ctrl(imx678->vblank_ctrl, imx678->vblank);
-			}
+			// If requested exposure time is too big
+			if (desired_fps == 0)
+				return -EINVAL;
 
-			lpfr = imx678->vblank + imx678->cur_mode->height;
-			lpfr += lpfr % 2; // LPFR must be even
-			shutter = NON_NEGATIVE(imx678->cur_mode->dol * (int)lpfr - (int)exposure);
+			// lines-per-frame should allow at least shr0_min_gap gap for vblank.
+			lpfr = (CLOCK_FREQ_HZ / imx678->cur_mode->hblank) / desired_fps;
+			lpfr = MAX(lpfr, imx678->cur_mode->height + shr0_min_gap);
+
+			imx678->vblank = lpfr - exposure_time;
+			__v4l2_ctrl_s_ctrl(imx678->vblank_ctrl, imx678->vblank);
+
+			shutter = NON_NEGATIVE(imx678->cur_mode->dol * (int)lpfr - (int)exposure_time);
+			imx678->lef.exp_ctrl->val = exposure_time;
 			break;
 		}
 		case (SEF1): {
-			shutter = NON_NEGATIVE((int)imx678->cur_mode->rhs1 - (int)exposure);
+			shutter = NON_NEGATIVE((int)imx678->cur_mode->rhs1 - (int)exposure_time);
+			imx678->sef1.exp_ctrl->val = exposure_time;
 			break;
 		}
 		case (SEF2): {
-			shutter = NON_NEGATIVE((int)imx678->cur_mode->rhs2 - (int)exposure);
+			shutter = NON_NEGATIVE((int)imx678->cur_mode->rhs2 - (int)exposure_time);
+			imx678->sef2.exp_ctrl->val = exposure_time;
 			break;
 		}
 	}
 
-	dev_dbg(imx678->dev, "Set long exp %u analog gain %u sh%d %u lpfr %u",
-		 exposure, gain, exposure_type, shutter, lpfr);
+	dev_dbg(imx678->dev, "Set long exposure time %u analog gain %u sh%d %u lpfr %u",
+		 exposure_time, gain, exposure_type, shutter, lpfr);
 
 	ret = imx678_write_reg(imx678, IMX678_REG_HOLD, 1, 1);
 	if (ret)
@@ -4177,10 +4193,10 @@ static int imx678_init_controls(struct imx678 *imx678)
 		imx678->hblank_ctrl->flags |= V4L2_CTRL_FLAG_READ_ONLY;
 
 	if (ctrl_hdlr->error) {
-		dev_err(imx678->dev, "control init failed: %d",
-			ctrl_hdlr->error);
+		ret = ctrl_hdlr->error;
+		dev_err(imx678->dev, "control init failed: %d", ret);
 		v4l2_ctrl_handler_free(ctrl_hdlr);
-		return ctrl_hdlr->error;
+		return ret;
 	}
 
 	imx678->sd.ctrl_handler = ctrl_hdlr;

@@ -183,7 +183,7 @@ struct rxwrapper_config {
 
 static const struct rxwrapper_config hailo15_rxwrapper_config = {
     .rxwrapper_vision_ss_null_addr = 0x60700000,
-    .rxwrapper_cfg_reg_value = 0x3f101,
+    .rxwrapper_cfg_reg_value = 0xf101,
     .rxwrapper_pipes_data_cfg_dtype_shift = 3,
     .rxwrapper_pipes_data_cfg_wc_vc_shift = 9,
 
@@ -1016,12 +1016,15 @@ static int hailo15_rxwrapper_set_pad_format(struct v4l2_subdev *sd,
 
 	switch (src_format->code) {
 	case MEDIA_BUS_FMT_SRGGB12_1X12:
+	case MEDIA_BUS_FMT_SGBRG12_1X12:
 		hailo15_rxwrapper->num_exposures = 1;
 		break;	
 	case MEDIA_BUS_FMT_SRGGB12_2X12:
+	case MEDIA_BUS_FMT_SGBRG12_2X12:
 		hailo15_rxwrapper->num_exposures = 2;
 		break;
 	case MEDIA_BUS_FMT_SRGGB12_3X12:
+	case MEDIA_BUS_FMT_SGBRG12_3X12:
 		hailo15_rxwrapper->num_exposures = 3;
 		break;
 	default:

@@ -1041,7 +1041,7 @@ static const char *const flash_cs_out_pad_2_grps[] = {
 
 static const char *const pwm0_grps[] = { "pwm0_0_grp",
 					 "pwm0_1_grp",
-					 "pwn0_2_grp" };
+					 "pwm0_2_grp" };
 
 static const char *const safety_out0_grps[] = { "safety_out0_0_grp",
 						"safety_out0_1_grp",

@@ -123,7 +123,7 @@ static int scmi_hwmon_sensor_trip_point_cb(struct notifier_block *nb,
 		scmi_sensors->ph, trip_point_report->sensor_id);
 
 	trip_point_id = (trip_point_report->trip_point_desc & SCMI_SENSOR_TRIP_POINT_EV__TRIP_ID_MASK);
-	dev_dbg(
+	dev_info(
 		scmi_sensors->dev,
 		"trip_point_cb: event[%lu] from: agent_id[%x], sensor_id[%x], trip_point_desc[%x] (dir=%s, trip_point_id=%d)\n",
 		event, trip_point_report->agent_id,

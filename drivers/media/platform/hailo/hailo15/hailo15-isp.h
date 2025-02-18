@@ -191,6 +191,8 @@ struct hailo15_isp_device {
 	struct timer_list frame_timer;
 	atomic_t frame_received;
 	atomic_t streaming_started;
+	bool tuning_state;
+	u64 curr_hdr_timestamp; /* Protected by mcm_lock */
 };
 
 

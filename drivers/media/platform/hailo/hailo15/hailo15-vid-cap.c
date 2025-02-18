@@ -15,6 +15,13 @@
 #include "hailo15-events.h"
 #include "hailo15-video-events.h"
 #include "hailo15-media.h"
+#include "isp_ctrl/hailo15_isp_ctrl.h"
+
+// Hint for how many controls we have (directly in vid-cap)
+#define NR_CONTROLS 1
+
+// Control IDs for those defined in this v4l device
+#define V4L2_VID_CAP_CID_TIMESTAMP_MODE (HAILO15_CID_VID_CAP_BASE + 0x001)
 
 #define HAILO_VID_NAME "hailo_video"
 
@@ -25,6 +32,9 @@
 
 #define STREAM_OFF 0
 #define STREAM_ON 1
+
+#define HDR_TIMESTAMP_MODE_OFF 0
+#define HDR_TIMESTAMP_MODE_ON 1
 
 #define VIDEO_INDEX_VALIDATE(index, do_fail)                                   \
 	do {                                                                   \
@@ -456,125 +466,6 @@ int hailo15_reqbufs(struct file *file, void *priv,
 	return ret;
 }
 
-static int hailo15_videoc_queryctrl(struct file *file, void *fh,
-					struct v4l2_queryctrl *a)
-{
-	struct hailo15_video_node *vid_node = video_drvdata(file);
-	struct media_pad *pad;
-	struct hailo15_pad_queryctrl pad_query_ctrl;
-	int ret;
-
-	pad = media_entity_remote_pad(&vid_node->pad);
-	pad_query_ctrl.pad = pad->index;
-	pad_query_ctrl.query_ctrl = a;
-	ret = v4l2_subdev_call(vid_node->direct_sd, core, ioctl,
-				   HAILO15_PAD_QUERYCTRL, &pad_query_ctrl);
-
-	return ret;
-}
-
-static int hailo15_videoc_query_ext_ctrl(struct file *file, void *fh,
-					 struct v4l2_query_ext_ctrl *a)
-{
-	struct hailo15_video_node *vid_node = video_drvdata(file);
-	struct media_pad *pad;
-	struct hailo15_pad_query_ext_ctrl pad_query_ext_ctrl;
-	int ret;
-
-	pad = media_entity_remote_pad(&vid_node->pad);
-	pad_query_ext_ctrl.pad = pad->index;
-	pad_query_ext_ctrl.query_ext_ctrl = a;
-	ret = v4l2_subdev_call(vid_node->direct_sd, core, ioctl,
-				   HAILO15_PAD_QUERY_EXT_CTRL, &pad_query_ext_ctrl);
-
-	return ret;
-}
-
-static int hailo15_vidioc_g_ctrl(struct file *file, void *fh,
-				 struct v4l2_control *a)
-{
-	struct hailo15_video_node *vid_node = video_drvdata(file);
-	struct media_pad *pad;
-	struct hailo15_pad_control pad_control;
-	int ret;
-
-	pad = media_entity_remote_pad(&vid_node->pad);
-	pad_control.pad = pad->index;
-	pad_control.control = a;
-	ret = v4l2_subdev_call(vid_node->direct_sd, core, ioctl,
-				   HAILO15_PAD_G_CTRL, &pad_control);
-
-	return ret;
-}
-
-static int hailo15_vidioc_s_ctrl(struct file *file, void *fh,
-				 struct v4l2_control *a)
-{
-	struct hailo15_video_node *vid_node = video_drvdata(file);
-	struct media_pad *pad;
-	struct hailo15_pad_control pad_control;
-	int ret;
-
-	pad = media_entity_remote_pad(&vid_node->pad);
-	pad_control.pad = pad->index;
-	pad_control.control = a;
-	ret = v4l2_subdev_call(vid_node->direct_sd, core, ioctl,
-				   HAILO15_PAD_S_CTRL, &pad_control);
-
-	return ret;
-}
-
-static int hailo15_vidioc_g_ext_ctrls(struct file *file, void *fh,
-					  struct v4l2_ext_controls *a)
-{
-	struct hailo15_video_node *vid_node = video_drvdata(file);
-	struct media_pad *pad;
-	struct hailo15_pad_ext_controls pad_ext_controls;
-	int ret;
-
-	pad = media_entity_remote_pad(&vid_node->pad);
-	pad_ext_controls.pad = pad->index;
-	pad_ext_controls.ext_controls = a;
-	ret = v4l2_subdev_call(vid_node->direct_sd, core, ioctl,
-				   HAILO15_PAD_G_EXT_CTRLS, &pad_ext_controls);
-
-	return ret;
-}
-
-static int hailo15_vidioc_s_ext_ctrls(struct file *file, void *fh,
-					  struct v4l2_ext_controls *a)
-{
-	struct hailo15_video_node *vid_node = video_drvdata(file);
-	struct media_pad *pad;
-	struct hailo15_pad_ext_controls pad_ext_controls;
-	int ret;
-
-	pad = media_entity_remote_pad(&vid_node->pad);
-	pad_ext_controls.pad = pad->index;
-	pad_ext_controls.ext_controls = a;
-	ret = v4l2_subdev_call(vid_node->direct_sd, core, ioctl,
-				   HAILO15_PAD_S_EXT_CTRLS, &pad_ext_controls);
-
-	return ret;
-}
-
-static int hailo15_vidioc_try_ext_ctrls(struct file *file, void *fh,
-					struct v4l2_ext_controls *a)
-{
-	struct hailo15_video_node *vid_node = video_drvdata(file);
-	struct media_pad *pad;
-	struct hailo15_pad_ext_controls pad_ext_controls;
-	int ret;
-
-	pad = media_entity_remote_pad(&vid_node->pad);
-	pad_ext_controls.pad = pad->index;
-	pad_ext_controls.ext_controls = a;
-	ret = v4l2_subdev_call(vid_node->direct_sd, core, ioctl,
-				   HAILO15_PAD_TRY_EXT_CTRLS, &pad_ext_controls);
-
-	return ret;
-}
-
 static int hailo15_vidioc_querymenu(struct file *file, void *fh,
 					struct v4l2_querymenu *a)
 {
@@ -685,13 +576,6 @@ static const struct v4l2_ioctl_ops video_ioctl_ops = {
 	.vidioc_s_parm = hailo15_s_parm,
 	.vidioc_g_parm = hailo15_g_parm,
 	.vidioc_reqbufs = hailo15_reqbufs,
-	.vidioc_queryctrl = hailo15_videoc_queryctrl,
-	.vidioc_query_ext_ctrl = hailo15_videoc_query_ext_ctrl,
-	.vidioc_g_ctrl = hailo15_vidioc_g_ctrl,
-	.vidioc_s_ctrl = hailo15_vidioc_s_ctrl,
-	.vidioc_g_ext_ctrls = hailo15_vidioc_g_ext_ctrls,
-	.vidioc_s_ext_ctrls = hailo15_vidioc_s_ext_ctrls,
-	.vidioc_try_ext_ctrls = hailo15_vidioc_try_ext_ctrls,
 	.vidioc_querymenu = hailo15_vidioc_querymenu,
 	.vidioc_expbuf = vb2_ioctl_expbuf,
 	.vidioc_create_bufs = vb2_ioctl_create_bufs,
@@ -713,6 +597,7 @@ static long hailo15_video_node_unlocked_ioctl(struct file *file,
 	uint64_t fc = 0;
 	struct hailo15_vsm vsm;
 	struct hailo15_get_vsm_params vsm_params;
+	bool tuning_state;
 
 	if (WARN_ON(!vid_node)) {
 		return -EINVAL;
@@ -760,6 +645,22 @@ static long hailo15_video_node_unlocked_ioctl(struct file *file,
 		}
 		mutex_unlock(&vid_node->ioctl_mutex);
 		ret = wait_event_interruptible(vid_node->stream_wait, vid_node->streaming);
+		break;
+	case VIDEO_TUNING_STATE:
+		ret = copy_from_user(&tuning_state, (void *)arg,
+					 sizeof(tuning_state));
+		if (ret) {
+			ret = -EINVAL;
+			break;
+		}
+		mutex_lock(&vid_node->ioctl_mutex);
+		vid_node->tuning_state = tuning_state;
+		ret = v4l2_subdev_call(vid_node->direct_sd, core, ioctl, HAILO15_TUNING,
+			&vid_node->tuning_state);
+		if (ret) {
+			pr_err("%s - failure on subdev call, return code %ld\n", __func__, ret);
+		}
+		mutex_unlock(&vid_node->ioctl_mutex);
 		break;
 	default:
 		/* video ioctls locks are handled by v4l2 framework */
@@ -1086,13 +987,24 @@ static int hailo15_video_device_buffer_done(struct hailo15_dma_ctx *ctx,
 		return -EINVAL;
 	}
 
+	if (WARN_ON(!vid_node->parent_vid_dev)) {
+		pr_err("%s - WARN_ON(!parent_vid_dev), returning\n", __func__);
+		return -EINVAL;
+	}
+
 	if (vid_node->path == VID_GRP_P2A) {
 		/* not isp flow, we can release buffer immediatly */
 		vid_node->prev_buf = buf;
 	}
 	if (vid_node->prev_buf) {
 		vid_node->prev_buf->vb.sequence = vid_node->sequence++;
-		vid_node->prev_buf->vb.vb2_buf.timestamp = ktime_get_raw_ns();
+
+		/* Write timestamp only if you should not forward it:
+		 * The first capture device (output to /dev/video2) will take the original timestamp.
+		 * The second capture device (output to /dev/video0) will optionally forward it.
+		 */
+		if (vid_node->parent_vid_dev->timestamp_mode_ctrl->cur.val == HDR_TIMESTAMP_MODE_OFF || vid_node->path != 0)
+			vid_node->prev_buf->vb.vb2_buf.timestamp = ktime_get_raw_ns();
 		vb2_buffer_done(&vid_node->prev_buf->vb.vb2_buf,
 				VB2_BUF_STATE_DONE);
 		vid_node->prev_buf = NULL;
@@ -1543,6 +1455,37 @@ out:
 	return ret;
 }
 
+static int hailo15_video_init_ctrl_handler(struct hailo15_vid_cap_device *vid_dev)
+{
+	int ret = 0;
+	struct v4l2_ctrl_config vid_cap_custom_ctrls[] = {
+		{
+		.id = V4L2_VID_CAP_CID_TIMESTAMP_MODE,
+		.type = V4L2_CTRL_TYPE_INTEGER,
+		.flags = V4L2_CTRL_FLAG_EXECUTE_ON_WRITE,
+		.name = "timestamp_mode",
+		.step = 1,
+		.min = 0,
+		.max = 1,
+		.def = 0,
+		}
+	};
+
+	v4l2_ctrl_handler_init(&(vid_dev->ctrl_handler), ARRAY_SIZE(vid_cap_custom_ctrls));
+	vid_dev->timestamp_mode_ctrl = v4l2_ctrl_new_custom(&vid_dev->ctrl_handler, &(vid_cap_custom_ctrls[0]), NULL);
+
+	// After registering all v4l controls, we must check this variable
+	// Note that it's sufficient to check it once at the end, as it makes registrations fail.
+	if (vid_dev->ctrl_handler.error) {
+		ret = vid_dev->ctrl_handler.error;
+		pr_err("vid cap control init failed: %d\n", ret);
+		v4l2_ctrl_handler_free(&vid_dev->ctrl_handler);
+		return ret;
+	}
+
+	return ret;
+}
+
 static int hailo15_video_init_vid_nodes(struct hailo15_vid_cap_device *vid_dev)
 {
 	struct hailo15_video_node *vid_node = NULL;
@@ -1613,6 +1556,12 @@ static int hailo15_video_init_vid_nodes(struct hailo15_vid_cap_device *vid_dev)
 
 		vid_dev->vid_nodes[vid_node->id] = vid_node;
 
+		// Associate the control handler with the video device
+		vid_node->video_dev->ctrl_handler = &vid_dev->ctrl_handler;
+
+		// Make sure we can access the video device from the video node
+		vid_dev->vid_nodes[vid_node->id]->parent_vid_dev = vid_dev;
+
 		ret = hailo15_media_get_subdev(vid_node->dev, vid_node->id, &sd);
 		if(ret){
 			pr_err("vid_node %d failed to get subdevice\n", vid_node->id);
@@ -1624,6 +1573,13 @@ static int hailo15_video_init_vid_nodes(struct hailo15_vid_cap_device *vid_dev)
 		ctx->buf_ctx[vid_node->path].ops->buffer_done = hailo15_video_device_buffer_done;
 		hailo15_video_node_set_private_data(ctx, vid_node->path,
 		                                           (void *)vid_node);
+
+		// Add subdevice controls to the main device's control handler
+		ret = v4l2_ctrl_add_handler(&vid_dev->ctrl_handler, sd->ctrl_handler, NULL, true);
+		if (ret) {
+			pr_err("failed to add subdevice controls to video node %d\n", vid_node->id);
+			goto err_node_alloc;
+		}
 
 		pr_info("vid_node %d initialized successfully\n", vid_node->id);
 		
@@ -1665,9 +1621,15 @@ static int hailo15_video_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, vid_dev);
 
+	ret = hailo15_video_init_ctrl_handler(vid_dev);
+	if (ret) {
+		dev_err(&pdev->dev, "failed to init ctrl handler");
+		goto err_init_nodes;
+	}
+
 	ret = hailo15_video_init_vid_nodes(vid_dev);
 	if (ret) {
-		pr_err("failed to init video nodes");
+		dev_err(&pdev->dev, "failed to init video nodes");
 		goto err_init_nodes;
 	}
 
@@ -1695,6 +1657,7 @@ static int hailo15_video_remove(struct platform_device *pdev)
 
 	mutex_destroy(&sd_mutex);
 	vid_dev = platform_get_drvdata(pdev);
+	v4l2_ctrl_handler_free(&vid_dev->ctrl_handler);
 	hailo15_video_device_destroy(vid_dev);
 	kfree(vid_dev);
 	return 0;

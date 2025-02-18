@@ -274,4 +274,7 @@
 /* Freescale LINFlexD UART */
 #define PORT_LINFLEXUART	122
 
+/* Designware 16550 UART with FIFO size of 32 */
+#define PORT_DW_16550A_F32	123
+
 #endif /* _UAPILINUX_SERIAL_CORE_H */

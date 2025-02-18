@@ -31,11 +31,45 @@
 #define IMX715_REG_LPFR 0x3024 // VMAX
 
 /* Exposure control */
-#define IMX715_REG_SHUTTER 0x3050
 #define IMX715_EXPOSURE_MIN 1
 #define IMX715_EXPOSURE_OFFSET 8
 #define IMX715_EXPOSURE_STEP 1
 #define IMX715_EXPOSURE_DEFAULT 0x0648
+
+/* Exposure control LEF */
+#define IMX715_REG_SHUTTER 0x3050
+#define IMX715_EXPOSURE_STEP 1
+
+/* Exposure control SEF1 */
+#define IMX715_REG_SHUTTER_SHORT 0x3054
+#define IMX715_EXPOSURE_SHORT_STEP 1
+
+/* Exposure control SEF2 */
+#define IMX715_REG_SHUTTER_VERY_SHORT 0x3058
+#define IMX715_EXPOSURE_VERY_SHORT_STEP 1
+
+#define IMX715_REG_HMAX 0x302C
+
+/* defaults */
+#define IMX715_DEFAULT_2DOL_RHS1 0x11d
+#define IMX715_DEFAULT_RHS2 0xaa
+#define IMX715_EXPOSURE_DEFAULT 0x0648
+
+/* min and max vals */
+#define IMX715_MIN_SHR0 8
+#define IMX715_2DOL_MIN_SHR1 9
+#define IMX715_3DOL_MIN_SHR1 13
+
+/* gaps */
+#define IMX715_RHS1_SHR1_2DOL_MIN_GAP 8
+#define IMX715_RHS1_SHR1_3DOL_MIN_GAP 12
+#define IMX715_FSC_SHR0_MIN_GAP 4
+#define IMX715_SHR0_RHS1_MIN_GAP 9
+#define IMX715_SHR0_RHS2_MIN_GAP 13
+#define IMX715_SHR2_RHS1_MIN_GAP 13
+#define IMX715_RHS2_SHR2_MIN_GAP 12
+
+#define IMX715_INTEGER_STEP 1
 
 #define IMX715_SDR_4K_VBLANK_MAX (((1 << 20) - 2) - 2160)
 
@@ -54,6 +88,13 @@
 #define IMX715_WDR_STEP 1
 #define IMX715_WDR_DEFAULT 0
 
+/* Hcg control */
+#define IMX715_REG_HCG 0x3030
+#define IMX715_HCG_MIN 0
+#define IMX715_HCG_MAX 1
+#define IMX715_HCG_STEP 1
+#define IMX715_HCG_DEFAULT 0
+
 /* Group hold register */
 #define IMX715_REG_HOLD 0x3001
 
@@ -71,7 +112,35 @@
 #define IMX715_TPG_PATSEL_DUOUT 0x30e6 /* Patsel mode */
 #define IMX715_TPG_COLOR_WIDTH 0x30e8 /* color width */
 
+#define NON_NEGATIVE(val) ((val) < 0 ? 0 : (val))
+#define MAX(val1, val2) ((val1) < val2 ? val2 : (val1))
+#define MIN(val1, val2) ((val1) < val2 ? val1 : (val2))
+
+#define IMX715_CID_BASE (V4L2_CID_USER_BASE + 0x2000)
+#define IMX715_CID_EXPOSURE_SHORT (IMX715_CID_BASE + 1)
+#define IMX715_CID_EXPOSURE_VERY_SHORT	(IMX715_CID_BASE + 2)
+#define IMX715_CID_ANALOGUE_GAIN_SHORT (IMX715_CID_BASE + 3)
+#define IMX715_CID_ANALOGUE_GAIN_VERY_SHORT (IMX715_CID_BASE + 4)
+#define IMX715_CID_RHS1 (IMX715_CID_BASE + 5)
+#define IMX715_CID_RHS2 (IMX715_CID_BASE + 6)
+#define IMX715_CID_SHR0 (IMX715_CID_BASE + 7)
+#define IMX715_CID_SHR1 (IMX715_CID_BASE + 8)
+#define IMX715_CID_SHR2 (IMX715_CID_BASE + 9)
+#define IMX715_CID_VMAX (IMX715_CID_BASE + 10)
+#define IMX715_CID_HMAX (IMX715_CID_BASE + 11)
+#define IMX715_CID_HCG (IMX715_CID_BASE + 12)
+
+static u32 imx715_reg_shutter[3] = {IMX715_REG_SHUTTER, IMX715_REG_SHUTTER_SHORT, IMX715_REG_SHUTTER_VERY_SHORT};
+static u32 imx715_reg_again[3] = {IMX715_REG_AGAIN, IMX715_REG_AGAIN1, IMX715_REG_AGAIN2};
+
+typedef enum {
+  LEF,
+  SEF1,
+  SEF2,
+} ExposureType;
+
 static int imx715_set_ctrl(struct v4l2_ctrl *ctrl);
+static int imx715_get_ctrl(struct v4l2_ctrl *ctrl);
 
 /*
  * imx715 test pattern related structure
@@ -115,6 +184,12 @@ static const struct v4l2_ctrl_ops imx715_ctrl_ops = {
 	.s_ctrl = imx715_set_ctrl,
 };
 
+/* V4l2 subdevice control ops*/
+static const struct v4l2_ctrl_ops imx715_get_ctrl_ops = {
+	.g_volatile_ctrl = imx715_get_ctrl,
+};
+
+
 /**
  * struct imx715_reg - imx715 sensor register
  * @address: Register address
@@ -134,6 +209,31 @@ struct imx715_reg_list {
 	u32 num_of_regs;
 	const struct imx715_reg *regs;
 };
+
+u32 _get_mode_reg_val_by_address(const struct imx715_reg_list *reg_list, u16 reg_address, int num_bytes) {
+	u32 left = 0;
+	u32 right = reg_list->num_of_regs - 1;
+	u32 val = 0;
+	int i = 0;
+	while (left <= right) {
+		u32 mid = left + (right - left) / 2;
+		if (reg_list->regs[mid].address == reg_address) {
+			val = 0;
+			for (i = 0; i < num_bytes; i++) {
+				if (reg_list->regs[mid + i].address == reg_address + i) {
+					val |= (reg_list->regs[mid + i].val & 0xff) << (8 * i);
+				}
+			}
+			return val;
+		}
+		if (reg_list->regs[mid].address < reg_address) {
+			left = mid + 1;
+		} else {
+			right = mid - 1;
+		}
+	}
+	return 0;
+}
 
 /**
  * struct imx715_mode - imx715 sensor mode structure
@@ -158,8 +258,16 @@ struct imx715_mode {
 	u32 vblank_max;
 	u64 pclk;
 	u32 link_freq_idx;
+	u32 rhs1;
+	u32 rhs2;
+	u8 dol;
 	struct imx715_reg_list reg_list;
 	struct v4l2_fract frame_interval;
+};
+
+struct exp_gain_ctrl_cluster {
+	struct v4l2_ctrl *exp_ctrl;
+	struct v4l2_ctrl *again_ctrl;
 };
 
 /**
@@ -196,12 +304,19 @@ struct imx715 {
 	struct v4l2_ctrl *pclk_ctrl;
 	struct v4l2_ctrl *hblank_ctrl;
 	struct v4l2_ctrl *vblank_ctrl;
+	struct v4l2_ctrl *rhs1_ctrl;
+	struct v4l2_ctrl *rhs2_ctrl;
+	struct v4l2_ctrl *shr0_ctrl;
+	struct v4l2_ctrl *shr1_ctrl;
+	struct v4l2_ctrl *shr2_ctrl;
+	struct v4l2_ctrl *vmax_ctrl;
+	struct v4l2_ctrl *hmax_ctrl;
 	struct v4l2_ctrl *test_pattern_ctrl;
 	struct v4l2_ctrl *mode_sel_ctrl;
-	struct {
-		struct v4l2_ctrl *exp_ctrl;
-		struct v4l2_ctrl *again_ctrl;
-	};
+	struct v4l2_ctrl *hcg_ctrl;
+	struct exp_gain_ctrl_cluster lef;
+	struct exp_gain_ctrl_cluster sef1;
+	struct exp_gain_ctrl_cluster sef2;
 	u32 vblank;
 	const struct imx715_mode *cur_mode;
 	struct mutex mutex;
@@ -542,6 +657,51 @@ static const struct imx715_reg mode_1920x1080_3dol_binning_20fps_regs[] = {
 	{0x3BC2, 0x7B}, {0x3BC4, 0xA2}, {0x3BC8, 0xBD}, {0x3BCA, 0xBD}, // Share regs}
 };
 
+static const struct imx715_reg mode_4k_2dol_all_pixel[] = {
+	{0x3000, 0x01}, // STANDBY					*imx715
+	{0x3002, 0x00}, // XMSTA Master mode operation start		*imx715
+	{0x3008, 0x5D},
+	{0x300A, 0x42},
+	{0x301C, 0x04}, // WINMODE
+	{0x3024, 0xca}, // VMAX 2250
+	{0x3025, 0x08}, // VMAX
+	{0x3026, 0x00}, // VMAX
+	{0x3040, 0x00}, // PIX_HST [7:0]
+	{0x3041, 0x00}, // PIX_HST [4:0]
+	{0x3042, 0x00}, // PIX_HWIDTH [7:0], 3840
+	{0x3043, 0x0F}, // PIX_HWIDTH [4:0]
+	{0x3044, 0x1c}, // PIX_VST [7:0] // 28: must be multiple of 4, pix_vst/2 should be minimum 1+12 to ignore dummy+ignored area of effective pixel
+	{0x3045, 0x00}, // PIX_VST [4:0]
+	{0x3046, 0xE0}, // PIX_VWIDTH_LSB cropping modeH direction(V) 4320
+	{0x3047, 0x10}, // PIX_VWIDTH_MSB
+	{0x302C, 0x01},
+	{0x302D, 0x01},
+	{0x3050, 0xf4}, // SHR0_LSB SHR0 500
+	{0x3051, 0x01}, // SHR0_MSB
+	{0x3054, 0x09},
+	{0x3060, 0x1d}, // RHS1_LSB RHS1 285 // must be 4n+1
+	{0x3061, 0x01}, // RHS1_MSB
+	{0x30C1, 0x00},
+	{0x30CF, 0x01}, {0x3116, 0x23}, {0x3118, 0xC6}, {0x311A, 0xE7}, {0x311E, 0x23}, {0x32D4, 0x21},
+	{0x32EC, 0xA1}, {0x344C, 0x2B}, {0x344D, 0x01}, {0x344E, 0xED}, {0x344F, 0x01}, {0x3450, 0xF6},
+	{0x3451, 0x02}, {0x3452, 0x7F}, {0x3453, 0x03}, {0x358A, 0x04}, {0x35A1, 0x02}, {0x35EC, 0x27},
+	{0x35EE, 0x8D}, {0x35F0, 0x8D}, {0x35F2, 0x29}, {0x36BC, 0x0C}, {0x36CC, 0x53}, {0x36CD, 0x00},
+	{0x36CE, 0x3C}, {0x36D0, 0x8C}, {0x36D1, 0x00}, {0x36D2, 0x71}, {0x36D4, 0x3C}, {0x36D6, 0x53},
+	{0x36D7, 0x00}, {0x36D8, 0x71}, {0x36DA, 0x8C}, {0x36DB, 0x00}, {0x3720, 0x00}, {0x3724, 0x02},
+	{0x3726, 0x02}, {0x3732, 0x02}, {0x3734, 0x03}, {0x3736, 0x03}, {0x3742, 0x03}, {0x3862, 0xE0},
+	{0x38CC, 0x30}, {0x38CD, 0x2F}, {0x395C, 0x0C}, {0x39A4, 0x07}, {0x39A8, 0x32}, {0x39AA, 0x32},
+	{0x39AC, 0x32}, {0x39AE, 0x32}, {0x39B0, 0x32}, {0x39B2, 0x2F}, {0x39B4, 0x2D}, {0x39B6, 0x28},
+	{0x39B8, 0x30}, {0x39BA, 0x30}, {0x39BC, 0x30}, {0x39BE, 0x30}, {0x39C0, 0x30}, {0x39C2, 0x2E},
+	{0x39C4, 0x2B}, {0x39C6, 0x25}, {0x3A42, 0xD1}, {0x3A4C, 0x77}, {0x3AE0, 0x02}, {0x3AEC, 0x0C},
+	{0x3B00, 0x2E}, {0x3B06, 0x29}, {0x3B98, 0x25}, {0x3B99, 0x21}, {0x3B9B, 0x13}, {0x3B9C, 0x13},
+	{0x3B9D, 0x13}, {0x3B9E, 0x13}, {0x3BA1, 0x00}, {0x3BA2, 0x06}, {0x3BA3, 0x0B}, {0x3BA4, 0x10},
+	{0x3BA5, 0x14}, {0x3BA6, 0x18}, {0x3BA7, 0x1A}, {0x3BA8, 0x1A}, {0x3BA9, 0x1A}, {0x3BAC, 0xED},
+	{0x3BAD, 0x01}, {0x3BAE, 0xF6}, {0x3BAF, 0x02}, {0x3BB0, 0xA2}, {0x3BB1, 0x03}, {0x3BB2, 0xE0},
+	{0x3BB3, 0x03}, {0x3BB4, 0xE0}, {0x3BB5, 0x03}, {0x3BB6, 0xE0}, {0x3BB7, 0x03}, {0x3BB8, 0xE0},
+	{0x3BBA, 0xE0}, {0x3BBC, 0xDA}, {0x3BBE, 0x88}, {0x3BC0, 0x44}, {0x3BC2, 0x7B}, {0x3BC4, 0xA2},
+	{0x3BC8, 0xBD}, {0x3BCA, 0xBD}, {0x4004, 0xC0}, {0x4005, 0x06},
+};
+
 /* Test pattern wasn't attempted */
 static const struct imx715_reg imx715_tpg_en_regs[] = {
 	//TPG config
@@ -562,6 +722,7 @@ static const struct imx715_mode supported_sdr_modes[] = {
 	.pclk = 594000000,
 	.link_freq_idx = 0,
 	.code = MEDIA_BUS_FMT_SGBRG12_1X12,
+	.dol = 1,
 	.reg_list = {
 		.num_of_regs = ARRAY_SIZE(mode_3840x2160_regs),
 		.regs = mode_3840x2160_regs,
@@ -581,6 +742,7 @@ static const struct imx715_mode supported_sdr_modes[] = {
 	.pclk = 594000000,
 	.link_freq_idx = 0,
 	.code = MEDIA_BUS_FMT_SGBRG12_1X12,
+	.dol = 1,
 	.reg_list = {
 		.num_of_regs = ARRAY_SIZE(mode_3840x2160_regs),
 		.regs = mode_3840x2160_regs,
@@ -600,6 +762,7 @@ static const struct imx715_mode supported_sdr_modes[] = {
 	.pclk = 594000000,
 	.link_freq_idx = 0,
 	.code = MEDIA_BUS_FMT_SGBRG12_1X12,
+	.dol = 1,
 	.reg_list = {
 		.num_of_regs = ARRAY_SIZE(mode_1920x1080_sdr_binning_regs),
 		.regs = mode_1920x1080_sdr_binning_regs,
@@ -614,6 +777,27 @@ static const struct imx715_mode supported_sdr_modes[] = {
 /* Supported sensor mode configurations - Not tested */
 static const struct imx715_mode supported_hdr_modes[] = {
 	{
+    .width = 3840,
+    .height = 2160,
+    .hblank = 1320,
+    .vblank = 90,
+    .vblank_min = 90,
+    .vblank_max = 132840,
+	.rhs1 = IMX715_DEFAULT_2DOL_RHS1,
+    .pclk = 594000000,
+    .link_freq_idx = 0,
+	.code = MEDIA_BUS_FMT_SGBRG12_2X12,
+	.dol = 2,
+    .reg_list = {
+        .num_of_regs = ARRAY_SIZE(mode_4k_2dol_all_pixel),
+        .regs = mode_4k_2dol_all_pixel,
+    },
+    .frame_interval = {
+        .denominator = 30,
+        .numerator = 1,
+    },
+	},
+	{
 	.width = 1920,
 	.height = 1080,
 	.hblank = 1320,
@@ -623,6 +807,7 @@ static const struct imx715_mode supported_hdr_modes[] = {
 	.pclk = 594000000,
 	.link_freq_idx = 0,
 	.code = MEDIA_BUS_FMT_SGBRG12_1X12,
+	.dol = 3,
 	.reg_list = {
 		.num_of_regs = ARRAY_SIZE(mode_1920x1080_3dol_binning_8fps_regs),
 		.regs = mode_1920x1080_3dol_binning_8fps_regs,
@@ -642,6 +827,7 @@ static const struct imx715_mode supported_hdr_modes[] = {
 	.pclk = 594000000,
 	.link_freq_idx = 0,
 	.code = MEDIA_BUS_FMT_SGBRG12_1X12,
+	.dol = 3,
 	.reg_list = {
 		.num_of_regs = ARRAY_SIZE(mode_1920x1080_3dol_binning_20fps_regs),
 		.regs = mode_1920x1080_3dol_binning_20fps_regs,
@@ -653,6 +839,155 @@ static const struct imx715_mode supported_hdr_modes[] = {
 	},
 
 };
+
+struct v4l2_ctrl_config imx715_custom_ctrls[] = {
+	{
+		.ops = &imx715_ctrl_ops,
+		.id = IMX715_CID_ANALOGUE_GAIN_SHORT,
+		.type = V4L2_CTRL_TYPE_INTEGER,
+		.flags = V4L2_CTRL_FLAG_UPDATE,
+		.name = "analogue_gain_short",
+		.step = IMX715_AGAIN_STEP,
+		.min = IMX715_AGAIN_MIN,
+		.max = IMX715_AGAIN_MAX,
+		.def = IMX715_AGAIN_DEFAULT,
+	},
+	{
+		.ops = &imx715_ctrl_ops,
+		.id = IMX715_CID_ANALOGUE_GAIN_VERY_SHORT,
+		.type = V4L2_CTRL_TYPE_INTEGER,
+		.flags = V4L2_CTRL_FLAG_UPDATE,
+		.name = "analogue_gain_very_short",
+		.step = IMX715_AGAIN_STEP,
+		.min = IMX715_AGAIN_MIN,
+		.max = IMX715_AGAIN_MAX,
+		.def = IMX715_AGAIN_DEFAULT,
+	},
+	{
+		.ops = &imx715_ctrl_ops,
+		.id = IMX715_CID_EXPOSURE_SHORT,
+		.type = V4L2_CTRL_TYPE_INTEGER,
+		.flags = V4L2_CTRL_FLAG_UPDATE,
+		.name = "exposure_short",
+		.step = IMX715_EXPOSURE_SHORT_STEP,
+	},
+	{
+		.ops = &imx715_ctrl_ops,
+		.id = IMX715_CID_EXPOSURE_VERY_SHORT,
+		.type = V4L2_CTRL_TYPE_INTEGER,
+		.flags = V4L2_CTRL_FLAG_UPDATE,
+		.name = "exposure_very_short",
+		.step = IMX715_EXPOSURE_VERY_SHORT_STEP,
+	},
+	{
+	.ops = &imx715_ctrl_ops,
+	.id = IMX715_CID_HCG,
+	.type = V4L2_CTRL_TYPE_BOOLEAN,
+	.flags = V4L2_CTRL_FLAG_UPDATE,
+	.name = "hcg",
+	.step = IMX715_HCG_STEP,
+	.min = IMX715_HCG_MIN,
+	.max = IMX715_HCG_MAX,
+	.def = IMX715_HCG_DEFAULT,
+	},
+	{
+		.ops = &imx715_get_ctrl_ops,
+		.id = IMX715_CID_RHS1,
+		.type = V4L2_CTRL_TYPE_INTEGER,
+		.flags = V4L2_CTRL_FLAG_READ_ONLY | V4L2_CTRL_FLAG_VOLATILE,
+		.name = "readout_timing_short",
+		.step = IMX715_INTEGER_STEP,
+	},
+	{
+		.ops = &imx715_get_ctrl_ops,
+		.id = IMX715_CID_RHS2,
+		.type = V4L2_CTRL_TYPE_INTEGER,
+		.flags = V4L2_CTRL_FLAG_READ_ONLY | V4L2_CTRL_FLAG_VOLATILE,
+		.name = "readout_timing_very_short",
+		.step = IMX715_INTEGER_STEP,
+	},
+	{
+		.ops = &imx715_get_ctrl_ops,
+		.id = IMX715_CID_SHR0,
+		.type = V4L2_CTRL_TYPE_INTEGER,
+		.flags = V4L2_CTRL_FLAG_READ_ONLY | V4L2_CTRL_FLAG_VOLATILE,
+		.name = "shutter_timing_long",
+		.step = IMX715_INTEGER_STEP,
+	},
+	{
+		.ops = &imx715_get_ctrl_ops,
+		.id = IMX715_CID_SHR1,
+		.type = V4L2_CTRL_TYPE_INTEGER,
+		.flags = V4L2_CTRL_FLAG_READ_ONLY | V4L2_CTRL_FLAG_VOLATILE,
+		.name = "shutter_timing_short",
+		.step = IMX715_EXPOSURE_SHORT_STEP,
+	},
+	{
+		.ops = &imx715_get_ctrl_ops,
+		.id = IMX715_CID_SHR2,
+		.type = V4L2_CTRL_TYPE_INTEGER,
+		.flags = V4L2_CTRL_FLAG_READ_ONLY | V4L2_CTRL_FLAG_VOLATILE,
+		.name = "shutter_timing_very_short",
+		.step = IMX715_EXPOSURE_VERY_SHORT_STEP,
+	},
+	{
+		.ops = &imx715_get_ctrl_ops,
+		.id = IMX715_CID_VMAX,
+		.type = V4L2_CTRL_TYPE_INTEGER,
+		.flags = V4L2_CTRL_FLAG_READ_ONLY | V4L2_CTRL_FLAG_VOLATILE,
+		.name = "vertical_span",
+		.step = IMX715_INTEGER_STEP,
+	},
+	{
+		.ops = &imx715_get_ctrl_ops,
+		.id = IMX715_CID_HMAX,
+		.type = V4L2_CTRL_TYPE_INTEGER,
+		.flags = V4L2_CTRL_FLAG_READ_ONLY | V4L2_CTRL_FLAG_VOLATILE,
+		.name = "horizontal_span",
+		.step = IMX715_INTEGER_STEP,
+	},	
+};
+
+static struct v4l2_ctrl_config *get_custom_ctrl_by_id(u32 id) {
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(imx715_custom_ctrls); i++) {
+		if (imx715_custom_ctrls[i].id == id)
+			return &imx715_custom_ctrls[i];
+	}
+
+	pr_err("Invalid control id: %d\n", id);
+	return NULL;
+}
+
+static void imx715_setup_custom_ctrl(struct imx715 *imx715, struct v4l2_ctrl **ctrl, u32 id) {
+	struct v4l2_ctrl_config *config = get_custom_ctrl_by_id(id);
+
+	if (!config) {
+		dev_err(imx715->dev, "Setup invalid custom control id: %d\n", id);
+		return;
+	}
+
+	*ctrl = v4l2_ctrl_new_custom(&imx715->ctrl_handler, config, NULL);
+}
+
+static void imx715_setup_custom_ctrl_limits(
+	struct imx715 *imx715, struct v4l2_ctrl **ctrl, u32 id,
+	s64 min, s64 max, s64 def)
+{
+	struct v4l2_ctrl_config *config = get_custom_ctrl_by_id(id);
+
+	if (!config) {
+		dev_err(imx715->dev, "Setup invalid custom control id: %d\n", id);
+		return;
+	}
+
+	config->min = min;
+	config->max = max;
+	config->def = def;
+	
+	*ctrl = v4l2_ctrl_new_custom(&imx715->ctrl_handler, config, NULL);
+}
 
 /**
  * to_imx715() - imv715 V4L2 sub-device to imx715 device.
@@ -761,64 +1096,108 @@ static int imx715_write_regs(struct imx715 *imx715,
 	return 0;
 }
 
-/**
- * imx715_update_controls() - Update control ranges based on streaming mode
- * @imx715: pointer to imx715 device
- * @mode: pointer to imx715_mode sensor mode
- *
- * Return: 0 if successful, error code otherwise.
- */
-/*
-static int imx715_update_controls(struct imx715* imx715,
-	const struct imx715_mode* mode)
+static int imx715_set_hcg_mode(struct imx715 *imx715, u32 hcg)
 {
 	int ret;
+	ret = imx715_write_reg(imx715, IMX715_REG_HCG, 1, hcg);
+	if (ret) {
+        dev_err(imx715->dev, "Failed to write HCG register: %d\n", ret);
+        return ret;
+    }
 
-	ret = __v4l2_ctrl_s_ctrl(imx715->link_freq_ctrl, mode->link_freq_idx);
-	if (ret)
-		return ret;
-
-	ret = __v4l2_ctrl_s_ctrl(imx715->hblank_ctrl, mode->hblank);
-	if (ret)
-		return ret;
-
-	return __v4l2_ctrl_modify_range(imx715->vblank_ctrl, mode->vblank_min,
-		mode->vblank_max, 1, mode->vblank);
+    dev_dbg(imx715->dev, "HCG mode set to %s\n", hcg ? "enabled" : "disabled");
+    
+	return 0;
 }
-*/
+
 /**
  * imx715_update_exp_gain() - Set updated exposure and gain
  * @imx715: pointer to imx715 device
  * @exposure: updated exposure value
  * @gain: updated analog gain value
+ * @exposure_type: exposure type (0: LEF, 1: SEF1, 2: SEF2)
  *
  * Return: 0 if successful, error code otherwise.
  */
-static int imx715_update_exp_gain(struct imx715 *imx715, u32 exposure, u32 gain)
+static int imx715_update_exp_gain(struct imx715 *imx715, u32 exposure, u32 gain, ExposureType exposure_type)
 {
 	u32 lpfr, shutter;
 	int ret;
-	
-	// vblank = 4500-2160 --> 2340
-	lpfr = imx715->vblank + imx715->cur_mode->height; 
-	shutter = lpfr - exposure;
+	int gap;
 
-	dev_dbg(imx715->dev, "Set long exp %u analog gain %u sh0 %u lpfr %u",
-		 exposure, gain, shutter, lpfr);
+	switch (exposure_type) {
+		case (LEF): {
+			switch(imx715->cur_mode->dol) {
+				case 1:
+					gap = IMX715_FSC_SHR0_MIN_GAP;
+					break;
+				case 2:
+					gap = IMX715_SHR0_RHS1_MIN_GAP;
+					break;
+				case 3:
+					gap = IMX715_SHR0_RHS2_MIN_GAP;
+					break;
+				default:
+					return -EINVAL;
+			}
+
+			// If the vblank is too small to fit the requested exposure, increase vblank
+			if (exposure > imx715->cur_mode->dol * (imx715->vblank + imx715->cur_mode->height) - gap) {
+				imx715->vblank = exposure - imx715->cur_mode->dol * (imx715->cur_mode->height) + gap;
+				__v4l2_ctrl_s_ctrl(imx715->vblank_ctrl, imx715->vblank);
+			}
+
+			lpfr = imx715->vblank + imx715->cur_mode->height;
+			lpfr += lpfr % 2; // LPFR must be even
+			shutter = NON_NEGATIVE(imx715->cur_mode->dol * (int)lpfr - (int)exposure);
+			// clip to max value
+			shutter = MIN(shutter, NON_NEGATIVE(imx715->cur_mode->dol*((int)lpfr - IMX715_FSC_SHR0_MIN_GAP)));
+			// clip to min value
+			switch (imx715->cur_mode->dol) {
+				case 1:
+					shutter = MAX(shutter, IMX715_MIN_SHR0);
+					break;
+				case 2:
+					shutter = MAX(shutter, (int)imx715->cur_mode->rhs1 + IMX715_SHR0_RHS1_MIN_GAP);
+					break;
+				case 3:
+					shutter = MAX(shutter, (int)imx715->cur_mode->rhs2 + IMX715_SHR0_RHS2_MIN_GAP);
+					break;
+			}
+			shutter = (int)(shutter/2)*2; // Shutter must be 2n
+			break;
+		}
+		case (SEF1): {
+			shutter = NON_NEGATIVE((int)imx715->cur_mode->rhs1 - (int)exposure);
+			shutter = MIN(MAX(shutter, IMX715_2DOL_MIN_SHR1), NON_NEGATIVE((int)imx715->cur_mode->rhs1 - IMX715_RHS1_SHR1_2DOL_MIN_GAP));
+			shutter = (int)(shutter/imx715->cur_mode->dol)*imx715->cur_mode->dol + 1; // Shutter must be 2n+1 in 2dol, 3n+1 in 3dol
+			break;
+		}
+		case (SEF2): {
+			// TODO: shr2 limits, 3dol mode wasn't ported yet.
+			shutter = NON_NEGATIVE((int)imx715->cur_mode->rhs2 - (int)exposure);
+			break;
+		}
+	}
+
+	dev_dbg(imx715->dev, "Set long exp %u analog gain %u sh%d %u lpfr %u",
+		 exposure, gain, exposure_type, shutter, lpfr);
 
 	ret = imx715_write_reg(imx715, IMX715_REG_HOLD, 1, 1);
 	if (ret)
 		return ret;
 
-	ret = imx715_write_reg(imx715, IMX715_REG_LPFR, 3, lpfr);
+	if (exposure_type == LEF) {
+		ret = imx715_write_reg(imx715, IMX715_REG_LPFR, 3, lpfr);
+		if (ret)
+			goto error_release_group_hold;
+	}
+
+	ret = imx715_write_reg(imx715, imx715_reg_shutter[exposure_type], 3, shutter);
 	if (ret)
 		goto error_release_group_hold;
 
-	ret = imx715_write_reg(imx715, IMX715_REG_SHUTTER, 3, shutter);
-	if (ret)
-		goto error_release_group_hold;
-
-	ret = imx715_write_reg(imx715, IMX715_REG_AGAIN, 1, gain);
+	ret = imx715_write_reg(imx715, imx715_reg_again[exposure_type], 2, gain);
 
 error_release_group_hold:
 	imx715_write_reg(imx715, IMX715_REG_HOLD, 1, 0);
@@ -852,6 +1231,280 @@ static int imx715_set_test_pattern(struct imx715 *imx715, int val)
 	return ret;
 }
 
+typedef struct ExposureLimits_t {
+
+    u32 lpfr;
+	u32 min_lpfr;
+	u32 max_lpfr;
+	u32 lef_reg;
+    u32 shr0_min;
+    u32 shr0_max;
+    u32 exp_lef_min;
+    u32 exp_lef_max;
+    u32 exp_lef_default;
+
+    u32 sef1_reg;
+    u32 shr1_min;
+    u32 shr1_max;
+    u32 exp_sef1_min;
+    u32 exp_sef1_max;
+    u32 exp_sef1_default;
+
+    u32 sef2_reg;
+    u32 shr2_min;
+    u32 shr2_max;
+    u32 exp_sef2_min;
+    u32 exp_sef2_max;
+    u32 exp_sef2_default;
+} * ExposureLimits;
+
+void calculate_exposure_limits(struct imx715* imx715, ExposureLimits limits) {
+	const int rhs1 = imx715->cur_mode->rhs1 > 0 ? imx715->cur_mode->rhs1 : IMX715_DEFAULT_2DOL_RHS1;
+	const int rhs2 = imx715->cur_mode->rhs2 > 0 ? imx715->cur_mode->rhs2 : IMX715_DEFAULT_RHS2;
+	u32 shr0, shr1, shr2;
+	limits->lpfr = imx715->cur_mode->dol * (imx715->cur_mode->vblank + imx715->cur_mode->height);
+	limits->min_lpfr = imx715->cur_mode->dol * (imx715->cur_mode->vblank_min + imx715->cur_mode->height);
+	limits->max_lpfr = imx715->cur_mode->dol * (imx715->cur_mode->vblank_max + imx715->cur_mode->height);
+
+	limits->lef_reg = IMX715_REG_SHUTTER;
+	switch (imx715->cur_mode->dol) {
+	case 1:
+		limits->shr0_min = IMX715_MIN_SHR0;
+		break;
+	case 2:
+		limits->shr0_min = imx715->cur_mode->rhs1 + IMX715_SHR0_RHS1_MIN_GAP;
+		break;
+	case 3:
+		limits->shr0_min = imx715->cur_mode->rhs2 + IMX715_SHR0_RHS2_MIN_GAP;
+		break;
+	default:
+		limits->shr0_min = IMX715_MIN_SHR0;
+		break;
+	}
+	limits->shr0_max = NON_NEGATIVE(limits->max_lpfr - imx715->cur_mode->dol * IMX715_FSC_SHR0_MIN_GAP);
+	limits->exp_lef_min = imx715->cur_mode->dol * IMX715_FSC_SHR0_MIN_GAP;
+	limits->exp_lef_max = NON_NEGATIVE(limits->max_lpfr - limits->shr0_min);
+	shr0 = _get_mode_reg_val_by_address(&imx715->cur_mode->reg_list, limits->lef_reg, 3);
+	shr0 = shr0 > 0 ? shr0 : limits->shr0_min;
+	limits->exp_lef_default = MAX(limits->exp_lef_min, NON_NEGATIVE((int)limits->lpfr - (int)shr0));
+
+	limits->sef1_reg = IMX715_REG_SHUTTER_SHORT;
+	switch (imx715->cur_mode->dol) {
+		case 1:
+		case 2:
+			limits->shr1_min = IMX715_2DOL_MIN_SHR1;
+			limits->shr1_max = NON_NEGATIVE(rhs1 - IMX715_RHS1_SHR1_2DOL_MIN_GAP);
+			break;
+		case 3:
+			limits->shr1_min = IMX715_3DOL_MIN_SHR1;
+			limits->shr1_max = NON_NEGATIVE(rhs1 - IMX715_RHS1_SHR1_3DOL_MIN_GAP);
+			break;
+		default:
+			limits->shr1_min = IMX715_2DOL_MIN_SHR1;
+			limits->shr1_max = NON_NEGATIVE(rhs1 - IMX715_RHS1_SHR1_2DOL_MIN_GAP);
+			break;
+	}
+	limits->exp_sef1_min = NON_NEGATIVE(rhs1 - limits->shr1_max);
+	limits->exp_sef1_max = NON_NEGATIVE(rhs1 - limits->shr1_min);
+	shr1 = MAX(limits->shr1_min, _get_mode_reg_val_by_address(&imx715->cur_mode->reg_list, limits->sef1_reg, 3));
+	limits->exp_sef1_default = MAX(limits->exp_sef1_min, NON_NEGATIVE((int)rhs1 - (int)shr1));
+
+	// TODO - rhs2 and shr2 limits, 3dol mode wasn't ported yet.
+	limits->sef2_reg = IMX715_REG_SHUTTER_VERY_SHORT;
+	limits->shr2_min = rhs1 + IMX715_SHR2_RHS1_MIN_GAP;
+	limits->shr2_max = NON_NEGATIVE(rhs2 - IMX715_RHS2_SHR2_MIN_GAP);
+	limits->exp_sef2_min = NON_NEGATIVE(rhs2 - limits->shr2_max);
+	limits->exp_sef2_max = NON_NEGATIVE(rhs2 - limits->shr2_min);
+	shr2 = MAX(limits->shr2_min, _get_mode_reg_val_by_address(&imx715->cur_mode->reg_list, limits->sef2_reg, 3));
+	limits->exp_sef2_default = MAX(limits->exp_sef2_min, NON_NEGATIVE((int)rhs2 - (int)shr2));
+}
+
+/**
+ * imx715_update_exp_vblank_controls() - Update control ranges based on streaming mode
+ * @imx715: pointer to imx715 device
+ *
+ * Return: 0 if successful, error code otherwise.
+ */
+static int imx715_update_exp_vblank_controls(struct imx715* imx715)
+{
+	struct ExposureLimits_t limits;
+	int ret;
+
+	memset(&limits, 0, sizeof(struct ExposureLimits_t));
+	calculate_exposure_limits(imx715, &limits);
+
+	ret = __v4l2_ctrl_modify_range(imx715->lef.exp_ctrl, limits.exp_lef_min, 
+		limits.exp_lef_max, IMX715_EXPOSURE_STEP, limits.exp_lef_default);
+	if (ret) {
+		dev_err(imx715->dev, "Failed to modify LEF exposure range. "
+							 "ret=%d. min=%d, max=%d, default=%d",
+							 ret, limits.exp_lef_min, limits.exp_lef_max, limits.exp_lef_default);
+		return ret;
+	}
+	ret = __v4l2_ctrl_s_ctrl(imx715->lef.exp_ctrl, limits.exp_lef_default);
+	if (ret) {
+		dev_err(imx715->dev, "Failed to set LEF exposure to default %d. ret=%d", limits.exp_lef_default, ret);
+		return ret;
+	}
+
+	if (imx715->cur_mode->dol >= 2) {
+		ret = __v4l2_ctrl_modify_range(imx715->sef1.exp_ctrl, limits.exp_sef1_min, 
+			limits.exp_sef1_max, IMX715_EXPOSURE_SHORT_STEP, limits.exp_sef1_default);
+		if (ret) {
+			dev_err(imx715->dev, "Failed to modify SEF1 exposure range. "
+								"ret=%d. min=%d, max=%d, default=%d",
+								ret, limits.exp_sef1_min, limits.exp_sef1_max, limits.exp_sef1_default);
+			return ret;
+		}
+		ret = __v4l2_ctrl_s_ctrl(imx715->sef1.exp_ctrl, limits.exp_sef1_default);
+		if (ret) {
+			dev_err(imx715->dev, "Failed to set SEF1 exposure to default %d. ret=%d", limits.exp_sef1_default, ret);
+			return ret;
+		}
+	}
+
+	if (imx715->cur_mode->dol >= 3) {
+		ret = __v4l2_ctrl_modify_range(imx715->sef2.exp_ctrl, limits.exp_sef2_min, 
+			limits.exp_sef2_max, IMX715_EXPOSURE_VERY_SHORT_STEP, limits.exp_sef2_default);
+		if (ret) {
+			dev_err(imx715->dev, "Failed to modify SEF2 exposure range. "
+								"ret=%d. min=%d, max=%d, default=%d",
+								ret, limits.exp_sef2_min, limits.exp_sef2_max, limits.exp_sef2_default);
+			return ret;
+		}
+		ret = __v4l2_ctrl_s_ctrl(imx715->sef2.exp_ctrl, limits.exp_sef2_default);
+		if (ret) {
+			dev_err(imx715->dev, "Failed to set SEF2 exposure to default %d. ret=%d", limits.exp_sef2_default, ret);
+			return ret;
+		}
+	}
+
+	ret = __v4l2_ctrl_s_ctrl(imx715->vblank_ctrl, imx715->vblank);
+	if (ret) {
+		dev_err(imx715->dev, "Failed to set vblank to %d. ret=%d", imx715->vblank, ret);
+		return ret;
+	}
+
+	return 0;
+}
+
+static void imx715_set_exp_activity(struct imx715 *imx715)
+{
+	int dol = imx715->cur_mode->dol;
+	bool sef1, sef2;
+
+	sef1 = dol >= 2;
+	sef2 = dol >= 3;
+
+	v4l2_ctrl_activate(imx715->sef1.again_ctrl, sef1);
+	v4l2_ctrl_activate(imx715->sef1.exp_ctrl, sef1);
+
+	v4l2_ctrl_activate(imx715->sef2.again_ctrl, sef2);
+	v4l2_ctrl_activate(imx715->sef2.exp_ctrl, sef2);
+}
+
+static void imx715_set_mode(struct imx715 *imx715, const struct imx715_mode *mode)
+{
+	imx715->cur_mode = mode;
+	imx715->vblank = mode->vblank;
+
+	if (imx715->hdr_enabled) {
+		if (mode->dol <= 1)
+			dev_err(imx715->dev, "Set to invalid HDR mode with DOL %d", mode->dol);
+	} else {
+		if (mode->dol > 1)
+			dev_err(imx715->dev, "Set to invalid SDR mode with DOL %d", mode->dol);
+	}
+}
+
+static int imx715_set_hdr_mode(struct imx715 *imx715, bool enable)
+{
+	const struct imx715_mode *prev_mode = NULL;
+	int ret, revert_ret;
+
+	ret = 0;
+	if (imx715->hdr_enabled != enable) {
+		imx715->hdr_enabled = enable;
+		prev_mode = imx715->cur_mode;
+
+		imx715_set_mode(imx715, imx715->hdr_enabled ? 
+								&supported_hdr_modes[DEFAULT_MODE_IDX] :
+								&supported_sdr_modes[DEFAULT_MODE_IDX]);
+
+		ret = imx715_update_exp_vblank_controls(imx715);
+		if (ret) {
+			dev_warn(imx715->dev, "Failed to update exp controls, trying to revert to previous mode\n");
+
+			imx715->hdr_enabled = !imx715->hdr_enabled;
+			imx715_set_mode(imx715, prev_mode);
+
+			revert_ret = imx715_update_exp_vblank_controls(imx715);
+			if (revert_ret)
+				dev_err(imx715->dev, "Failed to revert to previous mode (hdr_enabled back to %d, ret=%d)\n",
+					 imx715->hdr_enabled, revert_ret);
+		}
+
+		dev_dbg(imx715->dev, "Set HDR mode to %d", imx715->hdr_enabled);
+		imx715_set_exp_activity(imx715);
+	}
+
+	return ret;
+}
+
+
+static int imx715_get_ctrl(struct v4l2_ctrl *ctrl)
+{
+	struct imx715 *imx715 = container_of(ctrl->handler, struct imx715, ctrl_handler);
+	u16 reg = 0;
+	u32 len = 0;
+	int ret = 0;
+
+	switch (ctrl->id) {
+	case IMX715_CID_RHS1:
+		ctrl->val = imx715->cur_mode->rhs1;
+		break;
+	case IMX715_CID_RHS2:
+		ctrl->val = imx715->cur_mode->rhs2;
+		break;
+	case IMX715_CID_SHR0:
+		reg = IMX715_REG_SHUTTER;
+		len = 3;
+		break;
+	case IMX715_CID_SHR1:
+		reg = IMX715_REG_SHUTTER_SHORT;
+		len = 3;
+		break;
+	case IMX715_CID_SHR2:
+		reg = IMX715_REG_SHUTTER_VERY_SHORT;
+		len = 3;
+		break;
+	case IMX715_CID_VMAX:
+		reg = IMX715_REG_LPFR;
+		len = 3;
+		break;
+	case IMX715_CID_HMAX:
+		reg = IMX715_REG_HMAX;
+		len = 2;
+		break;
+	default:
+		dev_err(imx715->dev, "Invalid control %d", ctrl->id);
+		return -EINVAL;
+	}
+
+	if (reg && len) {
+		if (!imx715->streaming) {
+			dev_warn(imx715->dev, "Cannot read register 0x%x from sensor while not streaming\n", reg);
+			return -EBUSY;
+		}
+
+		ret = imx715_read_reg(imx715, reg, len, &ctrl->val);
+		if (ret)
+			dev_err(imx715->dev, "Failed to read register %d", reg);
+	}
+
+	return ret;
+}
+
 /**
  * imx715_set_ctrl() - Set subdevice control
  * @ctrl: pointer to v4l2_ctrl structure
@@ -869,37 +1522,72 @@ static int imx715_set_ctrl(struct v4l2_ctrl *ctrl)
 {
 	struct imx715 *imx715 =
 		container_of(ctrl->handler, struct imx715, ctrl_handler);
-	u32 analog_gain;
-	u32 exposure;
+	u32 analog_gain, exposure, lpfr, max_lpfr;
 	int ret;
 
 	switch (ctrl->id) {
 	case V4L2_CID_VBLANK:
 		imx715->vblank = imx715->vblank_ctrl->val;
+		max_lpfr = (imx715->cur_mode->vblank_max + imx715->cur_mode->height) * imx715->cur_mode->dol;
+		lpfr = (imx715->vblank + imx715->cur_mode->height) * imx715->cur_mode->dol;
 
 		dev_dbg(imx715->dev, "Received vblank %u, new lpfr %u",
-			imx715->vblank,
-			imx715->vblank + imx715->cur_mode->height);
-
+			imx715->vblank, lpfr);
 		ret = __v4l2_ctrl_modify_range(
-			imx715->exp_ctrl, IMX715_EXPOSURE_MIN,
-			imx715->vblank + imx715->cur_mode->height -
-				IMX715_EXPOSURE_OFFSET,
-			1, IMX715_EXPOSURE_DEFAULT);
+			imx715->lef.exp_ctrl, IMX715_FSC_SHR0_MIN_GAP,
+			max_lpfr - imx715->cur_mode->rhs2 - IMX715_SHR0_RHS2_MIN_GAP,
+			IMX715_EXPOSURE_STEP, lpfr - imx715->cur_mode->rhs2 - IMX715_SHR0_RHS2_MIN_GAP);
 		break;
 	case V4L2_CID_EXPOSURE:
+		/* Set controls only if sensor is in power on state */
+		if (!pm_runtime_get_if_in_use(imx715->dev))
+			return 0;
+
+		exposure = ctrl->val;
+		analog_gain = imx715->lef.again_ctrl->val;
+
+		dev_dbg(imx715->dev, "Received exp %u analog gain %u", exposure,
+			analog_gain);
+
+		ret = imx715_update_exp_gain(imx715, exposure, analog_gain, LEF);
+
+		pm_runtime_put(imx715->dev);
+
+		break;
+	case IMX715_CID_EXPOSURE_SHORT:
+		if (ctrl->flags & V4L2_CTRL_FLAG_INACTIVE)
+			return 0;
 
 		/* Set controls only if sensor is in power on state */
 		if (!pm_runtime_get_if_in_use(imx715->dev))
 			return 0;
 
 		exposure = ctrl->val;
-		analog_gain = imx715->again_ctrl->val;
+		analog_gain = imx715->sef1.again_ctrl->val;
 
 		dev_dbg(imx715->dev, "Received exp %u analog gain %u", exposure,
 			analog_gain);
 
-		ret = imx715_update_exp_gain(imx715, exposure, analog_gain);
+		ret = imx715_update_exp_gain(imx715, exposure, analog_gain, SEF1);
+
+		pm_runtime_put(imx715->dev);
+
+		break;
+	case IMX715_CID_EXPOSURE_VERY_SHORT:
+		if (ctrl->flags & V4L2_CTRL_FLAG_INACTIVE)
+			return 0;
+
+		/* Set controls only if sensor is in power on state */
+		if (!pm_runtime_get_if_in_use(imx715->dev))
+			return 0;
+
+		exposure = ctrl->val;
+		analog_gain = imx715->sef2.again_ctrl->val;
+
+		dev_dbg(imx715->dev, "Received exp %u analog gain %u", exposure,
+			analog_gain);
+
+		ret = imx715_update_exp_gain(imx715, exposure, analog_gain, SEF2);
 
 		pm_runtime_put(imx715->dev);
 
@@ -912,26 +1600,26 @@ static int imx715_set_ctrl(struct v4l2_ctrl *ctrl)
 		pm_runtime_put(imx715->dev);
 
 		break;
-	case V4L2_CID_WIDE_DYNAMIC_RANGE:		
-        if (ctrl->val) {
-            // Not supported yet
-		    dev_err(imx715->dev, "V4L2_CID_WIDE_DYNAMIC_RANGE not suppoterd yet\n");
-            return -EINVAL;
-        }
-
-		if (imx715->streaming) {
-			dev_warn(imx715->dev,
-				"Cannot set WDR mode while streaming\n");
+	case IMX715_CID_HCG:
+		/* Set controls only if sensor is in power on state */
+		if (!pm_runtime_get_if_in_use(imx715->dev))
 			return 0;
+		
+		dev_dbg(imx715->dev, "Setting HCG to %u\n", ctrl->val);
+
+		ret = imx715_set_hcg_mode(imx715, ctrl->val);
+		if (ret) {
+			dev_err(imx715->dev, "Failed to set HCG mode: %d\n", ret);
+		}
+		pm_runtime_put(imx715->dev);
+    	break;
+	case V4L2_CID_WIDE_DYNAMIC_RANGE:
+		if (imx715->streaming) {
+			dev_warn(imx715->dev, "Cannot set WDR mode while streaming\n");
+			return -EBUSY;
 		}
 
-		imx715->hdr_enabled = ctrl->val;
-		dev_dbg(imx715->dev, "hdr enable set to %d\n", imx715->hdr_enabled);
-		if (imx715->hdr_enabled)
-			imx715->cur_mode = &supported_hdr_modes[0];
-		else
-			imx715->cur_mode = &supported_sdr_modes[0];
-		ret = 0;
+		ret = imx715_set_hdr_mode(imx715, ctrl->val);
 		break;
 	default:
 		dev_err(imx715->dev, "Invalid control %d", ctrl->id);
@@ -1579,30 +2267,59 @@ static int imx715_init_controls(struct imx715 *imx715)
 {
 	struct v4l2_ctrl_handler *ctrl_hdlr = &imx715->ctrl_handler;
 	const struct imx715_mode *mode = imx715->cur_mode;
-	u32 lpfr;
+	struct ExposureLimits_t limits;
 	int ret;
 
-	ret = v4l2_ctrl_handler_init(ctrl_hdlr, 7);
+	const int num_ctrls = 12;
+	ret = v4l2_ctrl_handler_init(ctrl_hdlr, num_ctrls);
 	if (ret)
 		return ret;
+
+	memset(&limits, 0, sizeof(struct ExposureLimits_t));
+	calculate_exposure_limits(imx715, &limits);
 
 	/* Serialize controls with sensor device */
 	ctrl_hdlr->lock = &imx715->mutex;
 
-	/* Initialize exposure and gain */
-	lpfr = mode->vblank + mode->height;
-	imx715->exp_ctrl = v4l2_ctrl_new_std(
+	/* Initialize exposure and gain LEF */
+	imx715->lef.exp_ctrl = v4l2_ctrl_new_std(
 		ctrl_hdlr, &imx715_ctrl_ops, V4L2_CID_EXPOSURE,
-		IMX715_EXPOSURE_MIN, lpfr - IMX715_EXPOSURE_OFFSET,
-		IMX715_EXPOSURE_STEP, IMX715_EXPOSURE_DEFAULT);
+		limits.exp_lef_min, limits.exp_lef_max,
+		IMX715_EXPOSURE_STEP, limits.exp_lef_default);
 
-	imx715->again_ctrl =
+	imx715->lef.again_ctrl =
 		v4l2_ctrl_new_std(ctrl_hdlr, &imx715_ctrl_ops,
 				  V4L2_CID_ANALOGUE_GAIN, IMX715_AGAIN_MIN,
 				  IMX715_AGAIN_MAX, IMX715_AGAIN_STEP,
 				  IMX715_AGAIN_DEFAULT);
+	
+	v4l2_ctrl_cluster(2, &imx715->lef.exp_ctrl);
 
-	v4l2_ctrl_cluster(2, &imx715->exp_ctrl);
+	/* Initialize exposure and gain SEF1 */
+	imx715_setup_custom_ctrl_limits(imx715, &imx715->sef1.exp_ctrl, IMX715_CID_EXPOSURE_SHORT,
+		limits.exp_sef1_min, limits.exp_sef1_max, limits.exp_sef1_default);
+	imx715_setup_custom_ctrl(imx715, &imx715->sef1.again_ctrl, IMX715_CID_ANALOGUE_GAIN_SHORT);
+	v4l2_ctrl_cluster(2, &imx715->sef1.exp_ctrl);
+
+	/* Initialize exposure and gain SEF2 */
+	imx715_setup_custom_ctrl_limits(imx715, &imx715->sef2.exp_ctrl, IMX715_CID_EXPOSURE_VERY_SHORT,
+		limits.exp_sef2_min, limits.exp_sef2_max, limits.exp_sef2_default);
+	imx715_setup_custom_ctrl(imx715, &imx715->sef2.again_ctrl, IMX715_CID_ANALOGUE_GAIN_VERY_SHORT);
+	v4l2_ctrl_cluster(2, &imx715->sef2.exp_ctrl);
+
+	/* Read only HDR custom controls */
+	imx715_setup_custom_ctrl(imx715, &imx715->rhs1_ctrl, IMX715_CID_RHS1);
+	imx715_setup_custom_ctrl(imx715, &imx715->rhs2_ctrl, IMX715_CID_RHS2);
+	imx715_setup_custom_ctrl(imx715, &imx715->shr0_ctrl, IMX715_CID_SHR0);
+	imx715_setup_custom_ctrl(imx715, &imx715->shr1_ctrl, IMX715_CID_SHR1);
+	imx715_setup_custom_ctrl(imx715, &imx715->shr2_ctrl, IMX715_CID_SHR2);
+	
+	/* Other read only custom controls */
+	imx715_setup_custom_ctrl(imx715, &imx715->vmax_ctrl, IMX715_CID_VMAX);
+	imx715_setup_custom_ctrl(imx715, &imx715->hmax_ctrl, IMX715_CID_HMAX);
+
+	/* Initialize HCG control */
+	imx715_setup_custom_ctrl(imx715, &imx715->hcg_ctrl, IMX715_CID_HCG);
 
 	imx715->vblank_ctrl =
 		v4l2_ctrl_new_std(ctrl_hdlr, &imx715_ctrl_ops, V4L2_CID_VBLANK,
@@ -1618,7 +2335,7 @@ static int imx715_init_controls(struct imx715 *imx715)
 				V4L2_CID_WIDE_DYNAMIC_RANGE, IMX715_WDR_MIN,
 				IMX715_WDR_MAX, IMX715_WDR_STEP,
 				IMX715_WDR_DEFAULT);
-
+	
 	/* Read only controls */
 	imx715->pclk_ctrl = v4l2_ctrl_new_std(ctrl_hdlr, &imx715_ctrl_ops,
 					      V4L2_CID_PIXEL_RATE, mode->pclk,
@@ -1645,7 +2362,7 @@ static int imx715_init_controls(struct imx715 *imx715)
 	}
 
 	imx715->sd.ctrl_handler = ctrl_hdlr;
-
+	
 	return 0;
 }
 

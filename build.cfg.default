@@ -1,0 +1,27 @@
+# this is the default configuration for the build.sh script
+# to change the configuration simply do:
+#    cp build.cfg.default build.cfg
+# and edit build.cfg
+#
+
+# toolchain environment setup path
+TOOLCHAIN="/opt/poky/4.0.2/environment-setup-armv8a-poky-linux"
+
+# NFS directory path
+NFS_DIR=/mnt/hailo15_nfs/
+
+# set the DEPLOY_DIR into which we deploy the directory
+# by default use the TFTP directory
+source /etc/default/tftpd-hpa
+DEPLOY_DIR=${TFTP_DIRECTORY}
+
+# by default we infer the machine name (hailo15-sbc / hailo15-evb-security-camera) from the content of DEPLOY_DIR
+# however setting it here is also supported. uncomment the following line:
+#MACHINE="hailo15-sbc"
+
+# if you want to export modules then you must also have hailort and encoder in compatible branches
+# this is why by default it is disabled.
+# make sure to update hailort and encoder to appropriate revisions if you use this.
+#EXPORT_MODULES_TO_NFS=yes
+#HAILORT_DIR=$(realpath ${SCRIPT_PATH}/../platform-sw/hailort/drivers/linux/integrated_nnc)
+#ENCODER_DIR=$(realpath ${SCRIPT_PATH}/../vc8000e/software/linux_reference/kernel_module)

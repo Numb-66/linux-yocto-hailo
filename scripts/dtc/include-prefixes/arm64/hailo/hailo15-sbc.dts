@@ -336,7 +336,7 @@
 };
 
 #define GPIO_LINE_NAMES \
-    "SPI_CS2",                  "SPI_CS2",                  "DSI_RST",                  "CAM_TRIG", \
+    "SPI_CS2",                  "SPI_CS3",                  "DSI_RST",                  "CAM_TRIG", \
     "cam0_reset_n",             "cam1_reset_n",             "gpio_in_out_6",            "gpio_in_out_7", \
     "gpio_in_out_8",            "sdio0_gp_in",              "sdio0_cd_in",              "usb_overcurrent_n_in", \
     "usb_drive_vbus_out",       "sdio1_gp_in",              "sdio1_cd_in_n",            "RVSD", \

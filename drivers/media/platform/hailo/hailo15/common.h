@@ -25,6 +25,7 @@ enum hailo15_video_path {
 #define VIDEO_GET_VSM_IOC               _IOWR('D', BASE_VIDIOC_PRIVATE + 1, struct hailo15_get_vsm_params)
 #define VIDEO_GET_P2A_REGS              _IOR('D', BASE_VIDIOC_PRIVATE + 2, struct hailo15_p2a_buffer_regs_addr)
 #define VIDEO_WAIT_FOR_STREAM_START	_IO('D', BASE_VIDIOC_PRIVATE + 3)
+#define VIDEO_TUNING_STATE              _IOWR('D', BASE_VIDIOC_PRIVATE + 4, bool)
 
 
 #define ISPIOC_V4L2_READ_REG            _IOWR('I', BASE_VIDIOC_PRIVATE + 0, struct isp_reg_data)
@@ -58,6 +59,8 @@ enum hailo15_video_path {
 #define HAILO15_PAD_STAT_SUBSCRIBE      _IOWR('V', BASE_VIDIOC_PRIVATE + 21, struct hailo15_pad_stat_subscribe)
 #define HAILO15_PAD_STAT_UNSUBSCRIBE    _IOWR('V', BASE_VIDIOC_PRIVATE + 22, struct hailo15_pad_stat_subscribe)
 #define HAILO15_PAD_STAT_DONE           _IOWR('V', BASE_VIDIOC_PRIVATE + 23, struct hailo15_pad_stat)
+
+#define HAILO15_TUNING           		_IOWR('V', BASE_VIDIOC_PRIVATE + 24, bool)
 
 
 #define HAILO15_DMA_CTX_CB(ctx, func, grp_id, ...)							\
@@ -227,6 +230,60 @@ static const struct hailo15_video_fmt __hailo15_out_formats[] = {
 			.hscale_ratio = 1,
 			} },
 	},
+	{
+		.fourcc = V4L2_PIX_FMT_SGBRG12,
+		.code = MEDIA_BUS_FMT_SGBRG12_1X12,
+		.pix_fmt = RAW12,
+		.planarity = INTERLEAVED,
+		.num_planes = 1,
+		.width_modulus = 16,
+		.planes = { {
+			.bpp = 2,
+			.vscale_ratio = 1,
+			.hscale_ratio = 1,
+			} },
+	},
+	{
+		.fourcc = V4L2_PIX_FMT_SGBRG12,
+		.code = MEDIA_BUS_FMT_SGBRG12_3X12,
+		.pix_fmt = RAW12,
+		.planarity = INTERLEAVED,
+		.num_planes = 3,
+		.width_modulus = 16,
+		.planes = { {
+			.bpp = 2,
+			.vscale_ratio = 1,
+			.hscale_ratio = 1,
+			},
+			{
+			.bpp = 2,
+			.vscale_ratio = 1,
+			.hscale_ratio = 1,
+			},
+			{
+			.bpp = 2,
+			.vscale_ratio = 1,
+			.hscale_ratio = 1,
+			} },
+	},
+	{
+		.fourcc = V4L2_PIX_FMT_SGBRG12,
+		.code = MEDIA_BUS_FMT_SGBRG12_2X12,
+		.pix_fmt = RAW12,
+		.planarity = INTERLEAVED,
+		.num_planes = 2,
+		.width_modulus = 16,
+		.planes = { {
+			.bpp = 2,
+			.vscale_ratio = 1,
+			.hscale_ratio = 1,
+			},
+			{
+			.bpp = 2,
+			.vscale_ratio = 1,
+			.hscale_ratio = 1,
+			} },
+	},
 
 };
 
@@ -329,6 +386,60 @@ static const struct hailo15_video_fmt __hailo15_formats[] = {
 	{
 		.fourcc = V4L2_PIX_FMT_SRGGB12,
 		.code = MEDIA_BUS_FMT_SRGGB12_2X12,
+		.pix_fmt = RAW12,
+		.planarity = INTERLEAVED,
+		.num_planes = 2,
+		.width_modulus = 16,
+		.planes = { {
+			.bpp = 2,
+			.vscale_ratio = 1,
+			.hscale_ratio = 1,
+			},
+			{
+			.bpp = 2,
+			.vscale_ratio = 1,
+			.hscale_ratio = 1,
+			} },
+	},
+	{
+		.fourcc = V4L2_PIX_FMT_SGBRG12,
+		.code = MEDIA_BUS_FMT_SGBRG12_1X12,
+		.pix_fmt = RAW12,
+		.planarity = INTERLEAVED,
+		.num_planes = 1,
+		.width_modulus = 16,
+		.planes = { {
+			.bpp = 2,
+			.vscale_ratio = 1,
+			.hscale_ratio = 1,
+			} },
+	},
+	{
+		.fourcc = V4L2_PIX_FMT_SGBRG12,
+		.code = MEDIA_BUS_FMT_SGBRG12_3X12,
+		.pix_fmt = RAW12,
+		.planarity = INTERLEAVED,
+		.num_planes = 3,
+		.width_modulus = 16,
+		.planes = { {
+			.bpp = 2,
+			.vscale_ratio = 1,
+			.hscale_ratio = 1,
+			},
+			{
+			.bpp = 2,
+			.vscale_ratio = 1,
+			.hscale_ratio = 1,
+			},
+			{
+			.bpp = 2,
+			.vscale_ratio = 1,
+			.hscale_ratio = 1,
+			} },
+	},
+	{
+		.fourcc = V4L2_PIX_FMT_SGBRG12,
+		.code = MEDIA_BUS_FMT_SGBRG12_2X12,
 		.pix_fmt = RAW12,
 		.planarity = INTERLEAVED,
 		.num_planes = 2,

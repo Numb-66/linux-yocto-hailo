@@ -34,6 +34,7 @@
 #include <linux/wait.h>
 #include <linux/timer.h>
 #include <linux/jiffies.h>
+#include <linux/pm_runtime.h>
 
 #include "xrp_cma_alloc.h"
 #include "xrp_firmware.h"
@@ -577,6 +578,8 @@ static int xrp_deinit(struct platform_device *pdev)
     ida_simple_remove(&xvp_nodeid, xvp->nodeid);
     (void)xrp_unshare(xvp, xvp->cyclic_log.mapping, XRP_FLAG_READ_WRITE);
     kfree(xvp->cyclic_log.mapping);    
+    pm_runtime_set_suspended(xvp->dev);
+    pm_runtime_disable(xvp->dev);
     devm_kfree(&pdev->dev, xvp);
     return 0;
 }
@@ -620,6 +623,9 @@ static int xrp_probe(struct platform_device *pdev)
         devm_kfree(&pdev->dev, xvp);
         return ret;
     }
+
+    pm_runtime_set_active(xvp->dev);
+    pm_runtime_enable(xvp->dev);
 
     return 0;
 }

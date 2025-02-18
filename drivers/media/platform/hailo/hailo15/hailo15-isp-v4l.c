@@ -527,6 +527,12 @@ static long hailo15_vsi_isp_priv_ioctl(struct v4l2_subdev *sd, unsigned int cmd,
 	case HAILO15_PAD_STAT_UNSUBSCRIBE:
 		ret = hailo15_isp_stat_unsubscribe(sd, arg);
 		break;
+	case HAILO15_TUNING:
+		mutex_lock(&isp_dev->mlock);
+		memcpy(&isp_dev->tuning_state, arg, sizeof(bool));
+		mutex_unlock(&isp_dev->mlock);
+		ret = 0;
+		break;
 	default:
 		ret = -EINVAL;
 		pr_debug("unsupported isp command %x.\n", cmd);
@@ -626,9 +632,9 @@ static int hailo15_isp_refcnt_inc_enable(struct hailo15_isp_device *isp_dev)
 	mutex_lock(&isp_dev->mlock);
 
 	isp_dev->refcnt++;
-	pm_runtime_get_sync(isp_dev->dev);
 
 	if (isp_dev->refcnt == 1) {
+		pm_runtime_get_sync(isp_dev->dev);
 		hailo15_isp_enable_clocks(isp_dev);
 		hailo15_config_isp_wrapper(isp_dev);
 	}
@@ -651,8 +657,8 @@ static int hailo15_isp_refcnt_dec_disable(struct hailo15_isp_device *isp_dev)
 	isp_dev->refcnt--;
 
 	if (isp_dev->refcnt == 0) {
-		pm_runtime_put_sync(isp_dev->dev);
 		hailo15_isp_disable_clocks(isp_dev);
+		pm_runtime_put_sync(isp_dev->dev);
 		goto out;
 	}
 
@@ -762,11 +768,12 @@ disable:
 			}
 			hailo15_dma_buffer_done(ctx, ISP_PATH_TO_VID_GRP(path), isp_dev->cur_buf[ISP_MCM_IN]);
 			isp_dev->cur_buf[ISP_MCM_IN] = NULL;
+			isp_dev->mcm_mode = 0;
 			mutex_unlock(&isp_dev->mcm_lock);
 
 			return ret;
 		}
-		isp_dev->mcm_mode = 0;
+
 		isp_dev->frame_count[path] = 0;
 		isp_dev->mi_stopped[path] = 1;
 
@@ -983,6 +990,7 @@ inline void hailo15_isp_buffer_done(struct hailo15_isp_device *isp_dev,
 			list_del(&isp_dev->cur_buf[path]->irqlist);
 			next_buf = isp_dev->cur_buf[path];
 		}
+		isp_dev->curr_hdr_timestamp = buf->vb.vb2_buf.timestamp;
 		mutex_unlock(&isp_dev->mcm_lock);
 		if(next_buf){
 			hailo15_isp_configure_frame_base(isp_dev, next_buf->dma, path);
@@ -1002,9 +1010,15 @@ inline void hailo15_isp_buffer_done(struct hailo15_isp_device *isp_dev,
 
 		if (buf) {
 			isp_dev->current_vsm_index[path] = buf->vb.vb2_buf.index;
+
+			/* Read the timestamp of the MCM buffer (sent from hdr_manager via DMA). */
+			mutex_lock(&isp_dev->mcm_lock);
+			buf->vb.vb2_buf.timestamp = isp_dev->curr_hdr_timestamp;
+			mutex_unlock(&isp_dev->mcm_lock);
 		} else {
 			isp_dev->current_vsm_index[path] = -1;
 		}
+
 	}
 
 	hailo15_dma_buffer_done(ctx, ISP_PATH_TO_VID_GRP(path), buf);

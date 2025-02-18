@@ -465,12 +465,15 @@ static int pixel_mux_set_fmt(struct v4l2_subdev *sd,
 
 	switch (src_format->code) {
 	case MEDIA_BUS_FMT_SRGGB12_1X12:
+	case MEDIA_BUS_FMT_SGBRG12_1X12:
 		pixel_mux->num_exposures = 1;
 		break;
 	case MEDIA_BUS_FMT_SRGGB12_2X12:
+	case MEDIA_BUS_FMT_SGBRG12_2X12:
 		pixel_mux->num_exposures = 2;
 		break;
 	case MEDIA_BUS_FMT_SRGGB12_3X12:
+	case MEDIA_BUS_FMT_SGBRG12_3X12:
 		pixel_mux->num_exposures = 3;
 		break;
 	default:

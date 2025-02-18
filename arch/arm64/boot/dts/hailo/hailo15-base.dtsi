@@ -19,6 +19,9 @@
         };
     };
 
+    #include "hailo-ethernet.dtsi"
+    #include "hailo15-vision.dtsi"
+
     qspi: qspi@10c000 {
         compatible = "hailo,qspi-nor";
         #address-cells = <1>;
@@ -189,14 +192,20 @@
 &xrp {
     reg = <0 0x7c040000 0 0x8000>; // dsp config
     clock-frequency = <700000000>;
+    power-domains = <&scmi_devpd HAILO15_SCMI_POWER_DOMAIN_IDX_DSP>;
 };
 
 &sdio0 {
     compatible = "hailo,dwcmshc-sdhci-0";
+    clocks = <&scmi_clk HAILO15_SCMI_CLOCK_IDX_HCLK>, <&scmi_clk HAILO15_SCMI_CLOCK_IDX_SDIO_0_M_HCLK>,
+        <&scmi_clk HAILO15_SCMI_CLOCK_IDX_SDIO_0_CLK_DIV_BYPASS>, <&scmi_clk HAILO15_SCMI_CLOCK_IDX_SDIO_0_CARD_CLK>;
+    clock-names = "core", "bus", "clk_div_bypass","card_clk";
 };
 
 &sdio1 {
     compatible = "hailo,dwcmshc-sdhci-1";
+    resets = <&scmi_reset HAILO15_SCMI_RESET_IDX_SDIO1_8BIT_MUX>, <&scmi_reset HAILO15_SCMI_RESET_IDX_SDIO_1_CD_FROM_PINMUX>;
+    reset-names = "sdio1-8bit-mux", "sdio-cd-input";
 };
 
 &gpio0 {
@@ -207,4 +216,16 @@
 &gpio1 {
     reg = <0 0x78201000 0 0x1000>,
           <0 0x7c2a10f0 0 0xC>;
+};
+
+&hailo_vc8000e {
+    power-domains = <&scmi_devpd HAILO15_SCMI_POWER_DOMAIN_IDX_H265>;
+};
+
+&hailo_isp {
+    power-domains = <&scmi_devpd HAILO15_SCMI_POWER_DOMAIN_IDX_ISP>;
+};
+
+&edac {
+    reg = <0x0 0x7c060000 0x0 0x00002000>;
 };

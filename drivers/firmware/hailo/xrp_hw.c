@@ -22,6 +22,7 @@
 #include <linux/of_address.h>
 #include <linux/of_reserved_mem.h>
 #include <linux/slab.h>
+#include <linux/pm_runtime.h>
 
 void _dsp_config_writel(struct xvp *xvp, size_t offset, u32 value)
 {
@@ -136,30 +137,18 @@ static int dsp_poweron(struct xvp *xvp)
         goto exit;
     }
 
-    dsp_config_poweroff(xvp);
-
     ret = clk_set_rate(xvp->dsp_clock, pll_rate);
     if (ret) {
         dev_err(xvp->dev, "Error in clock set rate (%d)\n", ret);
         goto exit;
     }
 
-    ret = clk_prepare_enable(xvp->dsp_config_clock);
-    if (ret) {
-        dev_err(xvp->dev, "Error in clock prepare/enable (%d)\n", ret);
-        goto exit;
-    }
-
-    ret = 0;
-
 exit:
     return ret;
 }
 
-static int dsp_poweroff(struct xvp *xvp)
+static void dsp_poweroff(struct xvp *xvp)
 {
-    int ret;
-
     dev_dbg(xvp->dev, "DSP Poweroff\n");
 
     // Linux prints a warning if we try to 
@@ -167,17 +156,6 @@ static int dsp_poweroff(struct xvp *xvp)
     if (__clk_is_enabled(xvp->dsp_clock)) {
         clk_disable_unprepare(xvp->dsp_clock);
     }
-
-    dsp_config_poweroff(xvp);
-
-    ret = reset_control_assert(xvp->dsp_reset);
-    if (ret) {
-        xvp->state = DSP_STATE_FATAL_ERROR;
-        dev_err(xvp->dev, "Failed to assert reset (%d)\n", ret);
-        return ret;
-    }
-
-    return 0;
 }
 
 bool xrp_is_cmd_complete(struct xvp *xvp, struct xrp_comm *xrp_comm)
@@ -287,8 +265,14 @@ static void xrp_destroy_mbox(struct xvp *xvp)
 }
 
 int xrp_enable_dsp(struct xvp *xvp)
-{   
-    int ret = reset_control_deassert(xvp->dsp_reset);
+{
+    int ret;
+
+    dev_dbg(xvp->dev, "Enable DSP\n");
+
+    pm_runtime_get_sync(xvp->dev);
+
+    ret = reset_control_deassert(xvp->dsp_reset);
     if (ret) {
         dev_err(xvp->dev, "failed to deassert reset (%d)\n", ret);
         goto exit;
@@ -328,9 +312,26 @@ exit:
 
 int xrp_disable_dsp(struct xvp *xvp)
 {
+    int ret;
+
+    dev_dbg(xvp->dev, "Disable DSP\n");
+
     xrp_destroy_mbox(xvp);
 
-    return dsp_poweroff(xvp);
+    dsp_poweroff(xvp);
+
+    dsp_config_poweroff(xvp);
+
+    ret = reset_control_assert(xvp->dsp_reset);
+    if (ret) {
+        xvp->state = DSP_STATE_FATAL_ERROR;
+        dev_err(xvp->dev, "Failed to assert reset (%d)\n", ret);
+        return ret;
+    }
+
+    pm_runtime_put_sync(xvp->dev);
+
+    return 0;
 }
 
 void xrp_halt_dsp(struct xvp *xvp)

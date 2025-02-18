@@ -77,7 +77,14 @@ int hailo15_video_post_event(struct video_device *vdev,
 	struct hailo15_video_event_pkg_head *event_data;
 	struct hailo15_video_event_pkg *event_shm;
 	uint8_t cur_complete;
+	struct hailo15_video_node *vid_node = \
+		container_of(event_resource, struct hailo15_video_node, event_resource);
 	int ret = 0;
+
+	if (vid_node->tuning_state) {
+		pr_debug("%s - tuning in progress, ignore event\n", __func__);
+		return 0;
+	}
 
 	if (event_meta.event_type != HAILO15_DEAMON_VIDEO_EVENT) {
 		pr_err("%s - event type is %d, not video\n", __func__, event_meta.event_type);

@@ -26,6 +26,8 @@ struct dev_node {
 	int id;
 };
 
+struct hailo15_vid_cap_device;
+
 struct hailo15_video_node {
 	struct device *dev;
 	int id;
@@ -59,7 +61,9 @@ struct hailo15_video_node {
 	int path;
 	int sequence;
 	int pipeline_init;
+	bool tuning_state;
 	wait_queue_head_t stream_wait;
+	struct hailo15_vid_cap_device *parent_vid_dev;
 };
 
 struct hailo15_vid_cap_device {
@@ -67,6 +71,9 @@ struct hailo15_vid_cap_device {
 	struct media_device mdev;
 	struct v4l2_async_notifier subdev_notifier;
 	struct hailo15_video_node *vid_nodes[MAX_VIDEO_NODE_NUM];
+	
+	struct v4l2_ctrl_handler ctrl_handler;
+	struct v4l2_ctrl *timestamp_mode_ctrl;
 };
 
 struct hailo15_get_vsm_params {

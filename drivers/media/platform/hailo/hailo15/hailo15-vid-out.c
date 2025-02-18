@@ -661,7 +661,7 @@ static int hailo15_video_out_node_queue_init(struct hailo15_video_out_node *vid_
 	vid_node->queue.io_modes = VB2_MMAP | VB2_DMABUF;
 	vid_node->queue.mem_ops = &vb2_dma_contig_memops;
 	vid_node->queue.buf_struct_size = sizeof(struct hailo15_buffer);
-	vid_node->queue.timestamp_flags = V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;
+	vid_node->queue.timestamp_flags = V4L2_BUF_FLAG_TIMESTAMP_COPY;
 	vid_node->queue.dev = vid_node->dev;
 	vid_node->queue.lock = &vid_node->buffer_mutex;
 	vid_node->queue.min_buffers_needed = MIN_BUFFERS_NEEDED;

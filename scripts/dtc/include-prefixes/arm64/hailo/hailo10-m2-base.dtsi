@@ -41,17 +41,6 @@
     };
 };
 
-&reserved_memory {
-    /* set Linux,CMA area to 1 GiB */
-    cma: linux,cma {
-        size = <0x0 0x40000000>;
-        alloc-ranges = <0x0 0x86000000 0x0 0x40000000>;
-    };
-    hailo_media_buf_cma: hailo_media_buf,cma {
-        status = "disabled";
-    };
-};
-
 #define GPIO_LINE_NAMES \
     "gpio_in_out_0",            "gpio_in_out_1",        "gpio_in_out_2",            "gpio_in_out_3", \
     "gpio_in_out_4",            "boot_rom_led",         "gpio_in_out_6",            "gpio_in_out_7", \
@@ -76,5 +65,6 @@
 };
 
 &hailo_pci_ep_driver {
+    compatible = "hailo,hailo_pci_ep,hailo10h", "hailo,hailo_pci_ep";
     status = "okay";
 };

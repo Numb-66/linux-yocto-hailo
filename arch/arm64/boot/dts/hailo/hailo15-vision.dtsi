@@ -1,0 +1,287 @@
+    vision_subsys: vision_subsys {
+        power-domains = <&scmi_devpd HAILO15_SCMI_POWER_DOMAIN_IDX_VISION_SUBSYS>;
+        compatible = "simple-pm-bus";
+        status = "disabled";
+        ranges;
+
+        csi2rx0: csi-bridge@7c011000{
+            status = "disabled";
+            compatible = "cdns,csi2rx";
+            id = <0>;
+            reg = <0x0 0x7c011000 0x0 0x1000>;
+            power-domains = <&scmi_devpd HAILO15_SCMI_POWER_DOMAIN_IDX_CSI_RX0>;
+            ranges;
+            clocks = <&scmi_clk HAILO15_SCMI_CLOCK_IDX_CSI_RX0_CLK>, <&scmi_clk HAILO15_SCMI_CLOCK_IDX_CSI_RX0_PCLK>,
+                    <&scmi_clk HAILO15_SCMI_CLOCK_IDX_CSI_RX0_CLK>, <&scmi_clk HAILO15_SCMI_CLOCK_IDX_CSI_RX0_CLK>,
+                    <&scmi_clk HAILO15_SCMI_CLOCK_IDX_CSI_RX0_CLK>, <&scmi_clk HAILO15_SCMI_CLOCK_IDX_CSI_RX0_CLK>;
+            clock-names = "sys_clk", "p_clk",
+                    "pixel_if0_clk", "pixel_if1_clk",
+                    "pixel_if2_clk", "pixel_if3_clk";
+            interrupts = <GIC_SPI HW_INTERRUPTS__CSI_RX0_IRQ IRQ_TYPE_LEVEL_HIGH>;
+
+            ports {
+                #address-cells = <1>;
+                #size-cells = <0>;
+
+                port@0 {
+                    reg = <0>;
+
+                    csi2rx_in_sensor: endpoint {
+                        clock-lanes = <0>;
+                        data-lanes = <1 2 3 4>;
+                    };
+                };
+                port@1 {
+                    reg = <1>;
+
+                    csi2rx_out_mux: endpoint {
+                        remote-endpoint = <&mux_in_csi2rx>;
+                        data-lanes = <1 2 3 4>;
+                    };
+                };
+            };
+        };
+
+        csi2rx1: csi-bridge@7c015000 {
+            /* Unsupported in current FPGA*/
+            status = "disabled";
+            compatible = "cdns,csi2rx";
+            id = <1>;
+            reg = <0x0 0x7c015000 0x0 0x1000>;
+            ranges;
+            clocks = <&scmi_clk HAILO15_SCMI_CLOCK_IDX_CSI_RX1_CLK>, <&scmi_clk HAILO15_SCMI_CLOCK_IDX_CSI_RX1_PCLK>,
+                    <&scmi_clk HAILO15_SCMI_CLOCK_IDX_CSI_RX1_CLK>, <&scmi_clk HAILO15_SCMI_CLOCK_IDX_CSI_RX1_CLK>,
+                    <&scmi_clk HAILO15_SCMI_CLOCK_IDX_CSI_RX1_CLK>, <&scmi_clk HAILO15_SCMI_CLOCK_IDX_CSI_RX1_CLK>;
+            clock-names = "sys_clk", "p_clk",
+                    "pixel_if0_clk", "pixel_if1_clk",
+                    "pixel_if2_clk", "pixel_if3_clk";
+            interrupts = <GIC_SPI HW_INTERRUPTS__CSI_RX1_IRQ IRQ_TYPE_LEVEL_HIGH>;
+        };
+
+        dpi0: dpi@1a98000 {
+            status = "disabled";
+            compatible = "hailo,dsi";
+            reg = <0x0 0x7c019000 0x0 0x1000>;
+            power-domains = <&scmi_devpd HAILO15_SCMI_POWER_DOMAIN_IDX_CSI_TX0>;
+            clocks = <&scmi_clk HAILO15_SCMI_CLOCK_IDX_CSI_TX0_CLK>, <&scmi_clk HAILO15_SCMI_CLOCK_IDX_CSI_TX0_PCLK>;
+            clock-names = "dsi_sys_clk", "dsi_p_clk";
+            ports {
+                port@0 {
+                    reg = <0>;
+                    xxx_dpi_output: endpoint {
+                        remote-endpoint = <&dsi0_dpi_input>;
+                    };
+                };
+            };
+        };
+
+        dsi0: dsi@7c018000 {
+            status = "disabled";
+            compatible = "cdns,dsi";
+            reg = <0x0 0x7c018000 0x0 0x1000>;
+            clocks = <&scmi_clk HAILO15_SCMI_CLOCK_IDX_CSI_TX0_CLK>, <&scmi_clk HAILO15_SCMI_CLOCK_IDX_CSI_TX0_PCLK>;
+            clock-names = "dsi_sys_clk", "dsi_p_clk";
+            interrupts = <GIC_SPI HW_INTERRUPTS__CSI_TX0_DSI_IRQ IRQ_TYPE_LEVEL_HIGH>;
+            phys = <&dphy0>;
+            phy-names = "dphy";
+            #address-cells = <1>;
+            #size-cells = <0>;
+            ports {
+                #address-cells = <1>;
+                #size-cells = <0>;
+                port@1 {
+                    reg = <1>;
+                    dsi0_dpi_input: endpoint {
+                        remote-endpoint = <&xxx_dpi_output>;
+                    };
+                };
+            };
+        };
+
+        dphy0: dphy@0x7c01a000L{
+            status = "disabled";
+            reg = <0x0 0x7c01a000L 0x0 0x1000>;
+            compatible = "cdns,dphy";
+            clocks = <&scmi_clk HAILO15_SCMI_CLOCK_IDX_CSI_TX0_XTAL_CLK>, <&scmi_clk HAILO15_SCMI_CLOCK_IDX_MIPI_REF_CLK>,
+                <&scmi_clk HAILO15_SCMI_CLOCK_IDX_MIPI_ESC_CLK>;
+            clock-names = "psm", "pll_ref", "esc_clk";
+            #phy-cells = <0>;
+        };
+
+        hailo_vid_cap: video {
+            status = "disabled";
+            compatible = "hailo,vid-cap";
+
+            ports {
+                port@0{
+                    reg = <0>;
+                    vid0_in: vid0_in {
+                        reg = <0>;
+                        sink = <1>;
+                        path = <0>;
+                        remote-endpoint = <&isp_out_vid0>;
+                    };
+                };
+                port@1{
+                reg = <1>;
+                    vid1_in: vid1_in {
+                            reg = <1>;
+                            sink = <1>;
+                            path = <1>;
+                            remote-endpoint = <&isp_out_vid1>;
+                    };
+                };
+
+                port@2{
+                    reg = <2>;
+                    vid2_in: vid2_in {
+                        reg = <2>;
+                        sink = <1>;
+                        path = <2>;
+                        remote-endpoint = <&rxwrapper_out_vid2>;
+                    };
+                };
+            };
+        };
+
+        hailo_vid_out: video_out {
+            status = "ok";
+            compatible = "hailo,vid-out";
+            ports {
+                port@0{
+                    reg = <0>;
+                    vid_out_0_out: vid_out_0_out {
+                        reg = <0>;
+                        sink = <1>;
+                        path = <3>;
+                        remote-endpoint = <&isp_in_vid_out0>;
+                    };
+                };
+            };
+        };
+
+        hailo_isp: isp@7C000000 {
+            status = "disabled";
+            id = <0>;
+            reg = <0 0x7C000000 0 0x10000>, <0 0x7c01e000 0 0x1000>;
+            interrupts = <GIC_SPI HW_INTERRUPTS__ISP_FUNC_INTERRUPT_IRQ IRQ_TYPE_LEVEL_HIGH>;
+            ranges;
+            clocks = <&scmi_clk HAILO15_SCMI_CLOCK_IDX_ISP_WRAPPER_CLK>, <&scmi_clk HAILO15_SCMI_CLOCK_IDX_ISP_WRAPPER_PCLK>;
+            clock-names = "ip_clk", "p_clk";
+            null-addr = <0x60700000>;
+            ports {
+                port@0 {
+                    reg = <0>;
+                    isp_in_rxwrapper: isp_in_rxwrapper {
+                        sink = <1>;
+                        remote-endpoint = <&rxwrapper_out_isp>;
+                    };
+                };
+                port@2 {
+                    reg = <2>;
+                    isp_out_vid0: isp_out_vid0 {
+                        sink = <0>;
+                        remote-endpoint = <&vid0_in>;
+                    };
+                };
+                port@4 {
+                    reg = <4>;
+                    isp_out_vid1: isp_out_vid1{
+                        sink = <0>;
+                        remote-endpoint = <&vid1_in>;
+                    };
+                };
+                port@5 {
+                    reg = <5>;
+                    isp_in_vid_out0: isp_in_vid_out0 {
+                        sink = <0>;
+                        remote-endpoint = <&vid_out_0_out>;
+                    };
+                };
+            };
+        };
+
+        hailo_pixel_mux: hailo_pixel_mux@7C01C000 {
+            status = "disabled";
+            reg = <0 0x7C01C000 0 2000>;
+            ranges;
+            // vision hclk + vision clk - necessary for accessing pixel mux registers
+            // csi_rx0_xtal_clk + csi_rx1_xtal_clk - if someone should open this it should be the cdns csi driver, but it doesn't so it is here.
+            clocks = <&scmi_clk HAILO15_SCMI_CLOCK_IDX_VISION_CLK>, <&scmi_clk HAILO15_SCMI_CLOCK_IDX_VISION_HCLK>,
+                <&scmi_clk HAILO15_SCMI_CLOCK_IDX_CSI_RX0_XTAL_CLK>, <&scmi_clk HAILO15_SCMI_CLOCK_IDX_CSI_RX1_XTAL_CLK>;
+            clock-names = "vision_clk", "vision_hclk", "csi_rx0_xtal_clk", "csi_rx1_xtal_clk";
+            // since the pixel mux opens csi rx0's clock, it has to use it's power domain
+            // it can be removed if the pixel mux is not opening the csi xtal clocks
+            power-domains = <&scmi_devpd HAILO15_SCMI_POWER_DOMAIN_IDX_CSI_RX0>;
+
+            ports {
+                port@0 {
+                    reg = <0>;
+                    mux_in_csi2rx: endpoint {
+                        data-lanes = <1 2 3 4>;
+                        remote-endpoint = <&csi2rx_out_mux>;
+                    };
+                };
+                port@2 {
+                    reg = <2>;
+                    mux_out_rxwrapper: endpoint {
+                        data-lanes = <1 2 3 4>;
+                        remote-endpoint = <&rxwrapper_in_mux>;
+                    };
+                };
+            };
+        };
+
+        rxwrapper0: rxwrapper0@7c010000 {
+            status = "disabled";
+            reg = <0 0x7C010000 0 0x1000>;
+            interrupts = <0 HW_INTERRUPTS__VISION_BUFFER_READY_AP_INT_IRQ 4>, <0 HW_INTERRUPTS__VISION_SUBSYS_ERR_INT_IRQ 4>;
+            ranges;
+            power-domains = <&scmi_devpd HAILO15_SCMI_POWER_DOMAIN_IDX_CSI_RX0>;
+            clocks = <&scmi_clk HAILO15_SCMI_CLOCK_IDX_CSI_RX0_CLK>, <&scmi_clk HAILO15_SCMI_CLOCK_IDX_CSI_RX0_PCLK>;
+            clock-names = "rxwrapper0_data_clk", "rxwrapper0_p_clk";
+            ports {
+                port@0 {
+                    reg = <0>;
+                    rxwrapper_in_mux: rxwrapper_in_mux {
+                        data-lanes = <1 2 3 4>;
+                        remote-endpoint = <&mux_out_rxwrapper>;
+                    };
+                };
+                port@1 {
+                    reg = <1>;
+                    rxwrapper_out_vid2: rxwrapper_out_vid1 {
+                        sink = <0>;
+                        data-lanes = <1 2 3 4>;
+                        remote-endpoint = <&vid2_in>;
+                    };
+                };
+                port@2 {
+                    reg = <2>;
+                    rxwrapper_out_isp: rxwrapper_out_isp {
+                        sink = <0>;
+                        data-lanes = <1 2 3 4>;
+                        remote-endpoint = <&isp_in_rxwrapper>;
+                    };
+                };
+            };
+        };
+
+        rxwrapper1: rxwrapper1@7c014000 {
+            status = "disabled";
+            compatible = "hailo,hailo15-rxwrapper";
+            reg = <0 0x7C014000 0 0x1000>;
+        };
+    };
+
+    hailo_vc8000e: vc8000e@0x7C030000 {
+        status = "disabled";
+        compatible = "vivante,vc8000e";
+        reg = <0 0x7C030000 0 0x10000>;
+        memory-region = <&vc8000e_reserved>;
+        interrupts = <GIC_SPI HW_INTERRUPTS__H265_INT_IRQ IRQ_TYPE_LEVEL_HIGH>;
+        clocks = <&scmi_clk HAILO15_SCMI_CLOCK_IDX_H265_HCLK>, <&scmi_clk HAILO15_SCMI_CLOCK_IDX_H265_CLK>;
+        clock-names = "hclk", "clk";
+        resets = <&scmi_reset HAILO15_SCMI_RESET_IDX_H265>;
+        reset-names = "h265-rst";
+    };

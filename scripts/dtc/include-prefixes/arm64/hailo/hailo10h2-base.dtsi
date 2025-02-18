@@ -1,0 +1,39 @@
+// SPDX-License-Identifier:     GPL-2.0
+/*
+ * Copyright (c) 2019-2024 Hailo Technologies Ltd. All rights reserved.
+ */
+
+#define HAILO_SOC_TYPE HAILO_SOC_HAILO10H2
+#include "hailo15-family-base.dtsi"
+
+/ {
+    soc {
+        compatible = "hailo,hailo10h2";
+    };
+
+    pl320_mailbox: mailbox {
+        reg = <0 0x78003000 0 0x1000>;
+    };
+};
+
+&hailo_pci_ep_driver {
+    compatible = "hailo,hailo_pci_ep,hailo10h2";
+    status = "okay";
+};
+
+&reserved_memory {
+    hailo_media_buf_cma: hailo_media_buf,cma {
+        status = "disabled";
+    };
+};
+
+&gp_vdma {
+    status = "disabled";
+};
+
+&edac {
+    reg = <0x0 0x7c050000 0x0 0x00002000>;
+};
+
+/delete-node/ &cpu_2;
+/delete-node/ &cpu_3;
