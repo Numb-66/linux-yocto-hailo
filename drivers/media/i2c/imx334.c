@@ -998,7 +998,7 @@ static int imx334_start_streaming(struct imx334 *imx334)
 		dev_err(imx334->dev, "fail to start streaming");
 		return ret;
 	}
-    pr_info("imx334: start_streaming successful\n");
+	pr_info("imx334: start_streaming successful\n");
 	return 0;
 }
 
