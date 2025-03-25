@@ -55,8 +55,9 @@
 #define CSI2RX_STREAM_DATA_CFG_REG(n) (CSI2RX_STREAM_BASE(n) + 0x008)
 #define CSI2RX_STREAM_DATA_CFG_EN_VC_SELECT BIT(31)
 #define CSI2RX_STREAM_DATA_CFG_VC_SELECT(n) BIT((n) + 16)
-#define CSI2RX_STREAM_DATA_CFG_DT0_RAW10 0x2b
-#define CSI2RX_STREAM_DATA_CFG_DT0_RAW12 0x2c
+#define CSI2RX_STREAM_DATA_CFG_DT0_RAW10 	0x2b
+#define CSI2RX_STREAM_DATA_CFG_DT0_RAW12 	0x2c
+#define CSI2RX_STREAM_DATA_CFG_DT0_YUV422_8b 	0x1e
 #define CSI2RX_STREAM_DATA_CFG_DT0_PROCESS_ENABLE BIT(7)
 
 #define CSI2RX_STREAM_CFG_REG(n) (CSI2RX_STREAM_BASE(n) + 0x00c)
@@ -114,6 +115,7 @@ const struct v4l2_ctrl_config csi2rx_mode_sel_ctrl_cfg = {
 struct csi2rx_priv {
 	struct device *dev;
 	unsigned int count;
+	int id;
 
 	/*
 	 * Used to prevent race conditions between multiple,
@@ -153,6 +155,10 @@ struct csi2rx_priv {
 static const struct csi2rx_fmt csi2rx_formats[] = {
 	{
 		.code	= MEDIA_BUS_FMT_SRGGB12_1X12,
+		.bpp	= 2,
+	},
+	{
+		.code	= MEDIA_BUS_FMT_YVYU8_2X8,
 		.bpp	= 2,
 	},
 	{
@@ -332,7 +338,7 @@ static int csi2rx_start(struct csi2rx_priv *csi2rx)
 
 		writel(CSI2RX_STREAM_CTRL_SOFT_RESET,
 		       csi2rx->base + CSI2RX_STREAM_CTRL_REG(i));
-		
+
 		csi2rx_stream_cfg_flags = CSI2RX_STREAM_CFG_FIFO_MODE_LARGE_BUF;
 		csi2rx_stream_cfg_flags |= fmt->bpp == 2 ? CSI2RX_STREAM_CFG_2_PPC : 0;
 
@@ -346,8 +352,15 @@ static int csi2rx_start(struct csi2rx_priv *csi2rx)
 		writel(csi2rx_stream_cfg_flags,
 				csi2rx->base + CSI2RX_STREAM_CFG_REG(i));
 
-		writel(CSI2RX_STREAM_DATA_CFG_DT0_PROCESS_ENABLE |
-			       CSI2RX_STREAM_DATA_CFG_DT0_RAW12,
+		switch (mfmt->code) {
+		case MEDIA_BUS_FMT_YVYU8_2X8:
+			reg = CSI2RX_STREAM_DATA_CFG_DT0_YUV422_8b;
+			break;
+		default:
+			reg = CSI2RX_STREAM_DATA_CFG_DT0_RAW12;
+			break;
+		}
+		writel(CSI2RX_STREAM_DATA_CFG_DT0_PROCESS_ENABLE | reg,
 		       csi2rx->base + CSI2RX_STREAM_DATA_CFG_REG(i));
 		writel(CSI2RX_STREAM_CTRL_START,
 		       csi2rx->base + CSI2RX_STREAM_CTRL_REG(i));
@@ -566,6 +579,11 @@ static int csi2rx_get_resources(struct csi2rx_priv *csi2rx,
 	u32 dev_cfg;
 	int ret;
 
+	if (device_property_read_u32(&pdev->dev, "id", &csi2rx->id)) {
+		dev_notice(&pdev->dev, "csi id property not found, setting to 0\n");
+		csi2rx->id = 0;
+	}
+
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	csi2rx->base = devm_ioremap_resource(&pdev->dev, res);
 	if (IS_ERR(csi2rx->base))
@@ -776,7 +794,7 @@ static int csi2rx_probe(struct platform_device *pdev)
 	unsigned int i;
 	int ret;
 
-    dev_info(&pdev->dev, "probe started");
+	dev_info(&pdev->dev, "probe started");
 
 	csi2rx = kzalloc(sizeof(*csi2rx), GFP_KERNEL);
 	if (!csi2rx)
@@ -797,8 +815,8 @@ static int csi2rx_probe(struct platform_device *pdev)
 	csi2rx->subdev.dev = &pdev->dev;
 	v4l2_subdev_init(&csi2rx->subdev, &csi2rx_subdev_ops);
 	v4l2_set_subdevdata(&csi2rx->subdev, &pdev->dev);
-	snprintf(csi2rx->subdev.name, V4L2_SUBDEV_NAME_SIZE, "%s.%s",
-		 KBUILD_MODNAME, dev_name(&pdev->dev));
+	snprintf(csi2rx->subdev.name, V4L2_SUBDEV_NAME_SIZE, "%s_%d.%s",
+		 KBUILD_MODNAME, csi2rx->id, dev_name(&pdev->dev));
 
 	/* Create our media pads */
 	csi2rx->subdev.entity.function = MEDIA_ENT_F_VID_IF_BRIDGE;
@@ -828,7 +846,7 @@ static int csi2rx_probe(struct platform_device *pdev)
 
 	dev_info(
 		&pdev->dev,
-		"Probed CSI2RX with %u/%u lanes, %u streams, %s D-PHY\n",
+		"Probed CSI2RX successfully with %u/%u lanes, %u streams, %s D-PHY\n",
 		csi2rx->num_lanes, csi2rx->max_lanes, csi2rx->max_streams,
 		csi2rx->has_internal_dphy ? "internal" : "external");
 
