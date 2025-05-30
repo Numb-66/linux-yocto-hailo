@@ -37,8 +37,10 @@
 
 #define MCM_RETIMING0 0x1284
 #define MCM_RETIMING1 0x1288
-#define MCM_RETIMING_VSYNC 0x0A
-#define MCM_RETIMING_HSYNC 0x11E201
+
+/* retiming values are calculated based on 33 FPS in 4k */
+#define MCM_RETIMING_VSYNC 0x0A /* vblank = 0 */
+#define MCM_RETIMING_HSYNC 0x11E201 /* hblank = 4578 cycles */
 
 /* isp ae mis and int mask */
 #define ISP_MIS_EXP_END_MASK 0x00040000

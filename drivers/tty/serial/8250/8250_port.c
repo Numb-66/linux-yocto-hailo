@@ -84,6 +84,14 @@ static const struct serial8250_config uart_config[] = {
 		.rxtrig_bytes	= {1, 4, 8, 14},
 		.flags		= UART_CAP_FIFO,
 	},
+	[PORT_DW_16550A_F32] = {
+		.name		= "DW_16550A_F32",
+		.fifo_size	= 32,
+		.tx_loadsz	= 32,
+		.fcr		= UART_FCR_ENABLE_FIFO | UART_FCR_R_TRIG_01,
+		.rxtrig_bytes	= {1, 8, 16, 30},
+		.flags		= UART_CAP_FIFO,
+	},
 	[PORT_CIRRUS] = {
 		.name		= "Cirrus",
 		.fifo_size	= 1,

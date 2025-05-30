@@ -21,29 +21,31 @@
 
 #define PCI_PHY_LINK_LANES_CFG_MAX PCI_PHY_LINK_LANES_CFG__4x1__MASTER_LANES_LN0_LN1_LN2_LN4
 #define PCI_PMA_PLL_FULL_RATE_CLK_DIVIDER_MAX PCI_PMA_PLL_FULL_RATE_CLK_DIVIDER_8
-#define MAX_USB_LANE 3
+
 
 #define PCIE_PHY_LANE_MODE__PCIE 0
 #define PCIE_PHY_LANE_MODE__USB 1
 
-/* pcie config registers */
-#define PCIE_CFG 0x9DC
+/* pcie config registers::pcie config */
 #define  PHY_MODE_LN_0_SHIFT 8
 #define  PHY_MODE_LN_0_MASK 0x300
 #define  PHY_MODE_LN_1_SHIFT 10
 #define  PHY_MODE_LN_1_MASK 0xC00
+// TODO Not relevant to 15L
 #define  PHY_MODE_LN_2_SHIFT 12
 #define  PHY_MODE_LN_2_MASK 0x3000
 #define  PHY_MODE_LN_3_SHIFT 14
 #define  PHY_MODE_LN_3_MASK 0xC000
-#define PHY_CONSTANT_ZERO_VALUE_FOR_DEBUG_0 0x91C
+
+/* pcie config registers::phy_constant_zero_value_for_debug_0 */
 #define  PMA_FULLRT_DIV_LN_0_MASK 0xC00
 #define  PMA_FULLRT_DIV_LN_0_SHIFT 10
 #define  PHY_LINK_CFG_LN_1_SHIFT 23
 #define  PHY_LINK_CFG_LN_1_MASK 0x800000
 #define  PMA_FULLRT_DIV_LN_1_MASK 0x3000000
 #define  PMA_FULLRT_DIV_LN_1_SHIFT 24
-#define PHY_CONSTANT_ZERO_VALUE_FOR_DEBUG_1 0x920
+
+/* pcie config registers::phy_constant_zero_value_for_debug_1 */
 #define  PHY_LINK_CFG_LN_2_SHIFT 5
 #define  PHY_LINK_CFG_LN_2_MASK 0x20
 #define  PMA_FULLRT_DIV_LN_2_MASK 0xC0
@@ -52,14 +54,14 @@
 #define  PHY_LINK_CFG_LN_3_MASK 0x80000
 #define  PMA_FULLRT_DIV_LN_3_MASK 0x300000
 #define  PMA_FULLRT_DIV_LN_3_SHIFT 20
-#define PCIE_CONFIG_BYPASS 0x950
+
+/* pcie config registers::pcie_config */
 #define  PHY_RESET_N_EN_SHIFT 10
 #define  PHY_RESET_N_EN_MASK 0x400
 #define  PHY_RESET_N_VAL_SHIFT 11
 #define  PHY_RESET_N_VAL_MASK 0x800
 
 /* usb config registers */
-#define USB_PCIE_PIPE_MUX_CFG 0x5C
 #define  USB_PIPE_DMUX_SEL_SHIFT 0
 #define  USB_PIPE_DMUX_SEL_MASK 1
 #define  USB_RX_PIPE_MUX_SEL_SHIFT 1
@@ -68,6 +70,17 @@
 #define  PHY_PIPE_LANES01_MUX_SEL_MASK 0x10
 #define  PHY_PIPE_LANES23_MUX_SEL_SHIFT 5
 #define  PHY_PIPE_LANES23_MUX_SEL_MASK 0x20
+
+
+struct usb_config_regs_offsets {
+	u32 usb_pcie_pipe_mux_cfg;
+};
+struct pcie_config_regs_offsets {
+	u32 pcie_cfg;
+	u32 phy_constant_zero_value_for_debug_0;
+	u32 phy_constant_zero_value_for_debug_1;
+	u32 pcie_cfg_bypass;
+};
 
 struct hailo_torrent {
 	void __iomem *usb_config;
@@ -78,6 +91,16 @@ struct hailo_torrent {
 	int usb_lane;
 	u32 lanes_cfg;
 	u32 usb_lane_pma_pll_full_rate_divider;
+	struct pcie_config_regs_offsets *pcie_config_regs_offsets;
+	struct usb_config_regs_offsets *usb_config_regs_offsets;
+	void (*usb_pcie_pipe_mux_cfg)(struct hailo_torrent *params);
+};
+
+struct hailo_matched_data {
+	int max_usb_lanes;
+	struct usb_config_regs_offsets usb_config_regs_offsets;
+	struct pcie_config_regs_offsets pcie_config_regs_offsets;
+	void (*usb_pcie_pipe_mux_cfg)(struct hailo_torrent *params);
 };
 
 static inline u32 hailo_torrent_pcie_config_readl(struct hailo_torrent *data, u32 offset)
@@ -106,22 +129,22 @@ static void pcie_pma_lane_full_rate_clk_divider_cfg(struct hailo_torrent *data, 
 
 	switch(lane) {
 	case 0:
-		offset = PHY_CONSTANT_ZERO_VALUE_FOR_DEBUG_0;
+		offset = data->pcie_config_regs_offsets->phy_constant_zero_value_for_debug_0;
 		mask = PMA_FULLRT_DIV_LN_0_MASK;
 		shift = PMA_FULLRT_DIV_LN_0_SHIFT;
 		break;
 	case 1:
-		offset = PHY_CONSTANT_ZERO_VALUE_FOR_DEBUG_0;
+		offset = data->pcie_config_regs_offsets->phy_constant_zero_value_for_debug_0;
 		mask = PMA_FULLRT_DIV_LN_1_MASK;
 		shift = PMA_FULLRT_DIV_LN_1_SHIFT;
 		break;
 	case 2:
-		offset = PHY_CONSTANT_ZERO_VALUE_FOR_DEBUG_1;
+		offset = data->pcie_config_regs_offsets->phy_constant_zero_value_for_debug_1;
 		mask = PMA_FULLRT_DIV_LN_2_MASK;
 		shift = PMA_FULLRT_DIV_LN_2_SHIFT;
 		break;
 	case 3:
-		offset = PHY_CONSTANT_ZERO_VALUE_FOR_DEBUG_1;
+		offset = data->pcie_config_regs_offsets->phy_constant_zero_value_for_debug_1;
 		mask = PMA_FULLRT_DIV_LN_3_MASK;
 		shift = PMA_FULLRT_DIV_LN_3_SHIFT;
 		break;
@@ -136,31 +159,34 @@ static void pcie_pma_lane_full_rate_clk_divider_cfg(struct hailo_torrent *data, 
 static void pcie_phy_link_lanes_cfg(struct hailo_torrent *data)
 {
 	u32 value;
+	u32 phy_constant_zero_value_for_debug_0_offset = data->pcie_config_regs_offsets->phy_constant_zero_value_for_debug_0;
+	u32 phy_constant_zero_value_for_debug_1_offset = data->pcie_config_regs_offsets->phy_constant_zero_value_for_debug_1;
 	u8 cfg_ln_1, cfg_ln_2, cfg_ln_3;
 
 	cfg_ln_1 = (data->lanes_cfg >> 0) & 1;
 	cfg_ln_2 = (data->lanes_cfg >> 1) & 1;
 	cfg_ln_3 = (data->lanes_cfg >> 2) & 1;
 
-	value = hailo_torrent_pcie_config_readl(data, PHY_CONSTANT_ZERO_VALUE_FOR_DEBUG_0);
+	value = hailo_torrent_pcie_config_readl(data, phy_constant_zero_value_for_debug_0_offset);
 	value &= ~PHY_LINK_CFG_LN_1_MASK;
 	value |= cfg_ln_1 << PHY_LINK_CFG_LN_1_SHIFT;
-	hailo_torrent_pcie_config_writel(data, PHY_CONSTANT_ZERO_VALUE_FOR_DEBUG_0, value);
+	hailo_torrent_pcie_config_writel(data, phy_constant_zero_value_for_debug_0_offset, value);
 
-	value = hailo_torrent_pcie_config_readl(data, PHY_CONSTANT_ZERO_VALUE_FOR_DEBUG_1);
+	value = hailo_torrent_pcie_config_readl(data, phy_constant_zero_value_for_debug_1_offset);
 	value &= ~PHY_LINK_CFG_LN_2_MASK;
 	value |= cfg_ln_2 << PHY_LINK_CFG_LN_2_SHIFT;
-	hailo_torrent_pcie_config_writel(data, PHY_CONSTANT_ZERO_VALUE_FOR_DEBUG_1, value);
+	hailo_torrent_pcie_config_writel(data, phy_constant_zero_value_for_debug_1_offset, value);
 
-	value = hailo_torrent_pcie_config_readl(data, PHY_CONSTANT_ZERO_VALUE_FOR_DEBUG_1);
+	value = hailo_torrent_pcie_config_readl(data, phy_constant_zero_value_for_debug_1_offset);
 	value &= ~PHY_LINK_CFG_LN_3_MASK;
 	value |= cfg_ln_3 << PHY_LINK_CFG_LN_3_SHIFT;
-	hailo_torrent_pcie_config_writel(data, PHY_CONSTANT_ZERO_VALUE_FOR_DEBUG_1, value);
+	hailo_torrent_pcie_config_writel(data, phy_constant_zero_value_for_debug_1_offset, value);
 }
 
 static void pcie_phy_bypass_reset_setup(struct hailo_torrent *data)
 {
 	u32 value;
+	u32 pcie_cfg_bypass_offset = data->pcie_config_regs_offsets->pcie_cfg_bypass;
 
 	/*
 	 *                              __
@@ -172,16 +198,17 @@ static void pcie_phy_bypass_reset_setup(struct hailo_torrent *data)
 	 *                              |
 	 *                          BYPASS_EN
 	 */
-	value = hailo_torrent_pcie_config_readl(data, PCIE_CONFIG_BYPASS);
+	value = hailo_torrent_pcie_config_readl(data, pcie_cfg_bypass_offset);
 	value &= ~PHY_RESET_N_VAL_MASK;
 	value |= PHY_RESET_N_EN_MASK;
-	hailo_torrent_pcie_config_writel(data, PCIE_CONFIG_BYPASS, value);
+	hailo_torrent_pcie_config_writel(data, pcie_cfg_bypass_offset, value);
 }
 
 // usb_lane may be -1 to indicate no USB lane
 static void pcie_phy_lanes_mode_cfg(struct hailo_torrent *data)
 {
 	u32 value;
+	u32 pcie_cfg_offset = data->pcie_config_regs_offsets->pcie_cfg;
 	u8 lane_0_mode = PCIE_PHY_LANE_MODE__PCIE;
 	u8 lane_1_mode = PCIE_PHY_LANE_MODE__PCIE;
 	u8 lane_2_mode = PCIE_PHY_LANE_MODE__PCIE;
@@ -202,7 +229,7 @@ static void pcie_phy_lanes_mode_cfg(struct hailo_torrent *data)
 		break;
 	}
 
-	value = hailo_torrent_pcie_config_readl(data, PCIE_CFG);
+	value = hailo_torrent_pcie_config_readl(data, pcie_cfg_offset);
 	value &= ~PHY_MODE_LN_0_MASK;
 	value |= lane_0_mode << PHY_MODE_LN_0_SHIFT;
 	value &= ~PHY_MODE_LN_1_MASK;
@@ -211,14 +238,34 @@ static void pcie_phy_lanes_mode_cfg(struct hailo_torrent *data)
 	value |= lane_2_mode << PHY_MODE_LN_2_SHIFT;
 	value &= ~PHY_MODE_LN_3_MASK;
 	value |= lane_3_mode << PHY_MODE_LN_3_SHIFT;
-	hailo_torrent_pcie_config_writel(data, PCIE_CFG, value);
+	hailo_torrent_pcie_config_writel(data, pcie_cfg_offset, value);
 }
 
-static void usb_pcie_pipe_mux_cfg(struct hailo_torrent *data)
+static void hailo15l_usb_pcie_pipe_mux_cfg(struct hailo_torrent *data)
 {
 	u32 value;
+	u32 usb_pcie_pipe_mux_cfg_offset = data->usb_config_regs_offsets->usb_pcie_pipe_mux_cfg;
 
-	value = hailo_torrent_usb_config_readl(data, USB_PCIE_PIPE_MUX_CFG);
+	value = hailo_torrent_usb_config_readl(data, usb_pcie_pipe_mux_cfg_offset);
+	switch (data->usb_lane) {
+	case 1:
+		value |= USB_RX_PIPE_MUX_SEL_MASK;
+		value |= PHY_PIPE_LANES23_MUX_SEL_MASK;
+		break;
+	case 0:
+		value &= ~USB_RX_PIPE_MUX_SEL_MASK;
+		value |= PHY_PIPE_LANES01_MUX_SEL_MASK;
+		break;
+	}
+	hailo_torrent_usb_config_writel(data, usb_pcie_pipe_mux_cfg_offset, value);
+}
+
+static void hailo15_usb_pcie_pipe_mux_cfg(struct hailo_torrent *data)
+{
+	u32 value;
+	u32 usb_pcie_pipe_mux_cfg_offset = data->usb_config_regs_offsets->usb_pcie_pipe_mux_cfg;
+
+	value = hailo_torrent_usb_config_readl(data, usb_pcie_pipe_mux_cfg_offset);
 	switch (data->usb_lane) {
 	case 3:
 		value |= USB_RX_PIPE_MUX_SEL_MASK;
@@ -241,8 +288,10 @@ static void usb_pcie_pipe_mux_cfg(struct hailo_torrent *data)
 		value &= ~PHY_PIPE_LANES01_MUX_SEL_MASK;
 		break;
 	}
-	hailo_torrent_usb_config_writel(data, USB_PCIE_PIPE_MUX_CFG, value);
+	hailo_torrent_usb_config_writel(data, usb_pcie_pipe_mux_cfg_offset, value);
 }
+
+
 
 void hailo_torrent_init(struct hailo_torrent *data)
 {
@@ -252,7 +301,7 @@ void hailo_torrent_init(struct hailo_torrent *data)
 	pcie_phy_link_lanes_cfg(data);
 	pcie_phy_bypass_reset_setup(data);
 	pcie_phy_lanes_mode_cfg(data);
-	usb_pcie_pipe_mux_cfg(data);
+	data->usb_pcie_pipe_mux_cfg(data);
 }
 
 static const struct of_dev_auxdata hailo_torrent_auxdata[] = {
@@ -268,6 +317,7 @@ static int hailo_torrent_probe(struct platform_device *pdev)
 	struct device_node *node = dev->of_node;
 	struct hailo_torrent *data;
 	struct resource *usb_res, *pcie_res;
+	struct hailo_matched_data *match;
 	int ret;
 
 	if (!node)
@@ -279,6 +329,15 @@ static int hailo_torrent_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, data);
 
+	/* Must executed after dev_set_drvdata(...) */
+	match = (struct hailo_matched_data*)of_device_get_match_data(&pdev->dev);
+	if (!match) {
+		dev_err(&pdev->dev, "unexpected device type\n");
+		return -ENODEV;
+	}
+	data->pcie_config_regs_offsets = &match->pcie_config_regs_offsets;
+	data->usb_config_regs_offsets = &match->usb_config_regs_offsets;
+	data->usb_pcie_pipe_mux_cfg = match->usb_pcie_pipe_mux_cfg;
 	usb_res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "usb-config");
 	if (!usb_res) {
 		dev_err(dev, "can't get IOMEM usb config resource\n");
@@ -327,7 +386,7 @@ static int hailo_torrent_probe(struct platform_device *pdev)
 		/* By default assume no usb lane */
 		data->usb_lane = NO_USB_LANE;
 	}
-	if (data->usb_lane > MAX_USB_LANE) {
+	if (data->usb_lane >= match->max_usb_lanes) {
 		dev_err(dev, "invalid usb lane %u", data->usb_lane);
 		return -EINVAL;
 	}
@@ -364,7 +423,7 @@ static int hailo_torrent_probe(struct platform_device *pdev)
 
 	clk_disable_unprepare(data->usb_pclk);
 
-	dev_info(dev, "Torrent phy wrapper initialized succesfully (usb in lane %d, lanes config %d, divider %d)",
+	dev_info(dev, "Torrent phy wrapper initialized successfully (usb in lane %d, lanes config %d, divider %d)",
 		data->usb_lane,
 		data->lanes_cfg,
 		data->usb_lane_pma_pll_full_rate_divider);
@@ -426,8 +485,38 @@ static const struct dev_pm_ops hailo_torrent_pm_ops = {
 	SET_RUNTIME_PM_OPS(hailo_torrent_suspend, hailo_torrent_resume, NULL)
 };
 
+static struct hailo_matched_data hailo15_matched_data = {
+	.max_usb_lanes = 4,
+	.pcie_config_regs_offsets = {
+		.pcie_cfg = 0x9DC,
+		.phy_constant_zero_value_for_debug_0 = 0x91C,
+		.phy_constant_zero_value_for_debug_1 = 0x920,
+		.pcie_cfg_bypass = 0x950,
+	},
+	.usb_config_regs_offsets = {
+		.usb_pcie_pipe_mux_cfg = 0x5C,
+	},
+	.usb_pcie_pipe_mux_cfg = hailo15_usb_pcie_pipe_mux_cfg,
+};
+
+static struct hailo_matched_data hailo15l_matched_data = {
+	.max_usb_lanes = 2,
+	.pcie_config_regs_offsets = {
+		.pcie_cfg = 0x9D4,
+		.phy_constant_zero_value_for_debug_0 = 0x914,
+		.phy_constant_zero_value_for_debug_1 = 0x918,
+		.pcie_cfg_bypass = 0x948,
+	},
+	.usb_config_regs_offsets = {
+		.usb_pcie_pipe_mux_cfg = 0x5C,
+	},
+	.usb_pcie_pipe_mux_cfg = hailo15l_usb_pcie_pipe_mux_cfg,
+};
+
 static const struct of_device_id hailo_torrent_of_match[] = {
-	{ .compatible = "hailo,torrent-phy", },
+	{ .compatible = "hailo,torrent-phy", .data = (void*)&hailo15_matched_data},
+	{ .compatible = "hailo15,torrent-phy", .data = (void*)&hailo15_matched_data},
+	{ .compatible = "hailo15l,torrent-phy", .data = (void*)&hailo15l_matched_data},
 	{},
 };
 MODULE_DEVICE_TABLE(of, hailo_torrent_of_match);
@@ -437,7 +526,7 @@ static struct platform_driver hailo_torrent_driver = {
 	.remove		= hailo_torrent_remove,
 	.driver		= {
 		.name	= "phy-hailo-torrent",
-		.of_match_table	= hailo_torrent_of_match,
+		.of_match_table	= of_match_ptr(hailo_torrent_of_match),
 		.pm	= &hailo_torrent_pm_ops,
 	},
 };

@@ -4,14 +4,7 @@
 #include <media/videobuf2-v4l2.h>
 #include <media/v4l2-fwnode.h>
 #include <media/v4l2-device.h>
-
-enum hailo15_video_path {
-	VID_GRP_ISP_MP,
-	VID_GRP_ISP_SP,
-	VID_GRP_P2A,
-	VID_GRP_MCM_IN,
-	VID_GRP_MAX,
-};
+#include <dt-bindings/soc/hailo15_video_path.h>
 
 #define STRIDE_ALIGN 16
 #define FMT_MAX_PLANES 3
@@ -25,6 +18,9 @@ enum hailo15_video_path {
 #define VIDEO_GET_VSM_IOC               _IOWR('D', BASE_VIDIOC_PRIVATE + 1, struct hailo15_get_vsm_params)
 #define VIDEO_GET_P2A_REGS              _IOR('D', BASE_VIDIOC_PRIVATE + 2, struct hailo15_p2a_buffer_regs_addr)
 #define VIDEO_WAIT_FOR_STREAM_START	_IO('D', BASE_VIDIOC_PRIVATE + 3)
+#define VIDEO_TUNING_STATE              _IOWR('D', BASE_VIDIOC_PRIVATE + 4, bool)
+#define VIDEO_HDR_TIME_STAMP_MODE_SET    _IOW('D', BASE_VIDIOC_PRIVATE + 5, bool)
+#define VIDEO_HDR_TIME_STAMP_MODE_GET    _IOR('D', BASE_VIDIOC_PRIVATE + 6, bool)
 
 
 #define ISPIOC_V4L2_READ_REG            _IOWR('I', BASE_VIDIOC_PRIVATE + 0, struct isp_reg_data)
@@ -59,6 +55,8 @@ enum hailo15_video_path {
 #define HAILO15_PAD_STAT_UNSUBSCRIBE    _IOWR('V', BASE_VIDIOC_PRIVATE + 22, struct hailo15_pad_stat_subscribe)
 #define HAILO15_PAD_STAT_DONE           _IOWR('V', BASE_VIDIOC_PRIVATE + 23, struct hailo15_pad_stat)
 
+#define HAILO15_TUNING           		_IOWR('V', BASE_VIDIOC_PRIVATE + 24, bool)
+
 
 #define HAILO15_DMA_CTX_CB(ctx, func, grp_id, ...)							\
 ({																	\
@@ -84,6 +82,8 @@ enum hailo15_video_path {
 
 #define hailo15_video_node_buffer_process(ctx, grp_id, buf)                            \
 	(HAILO15_DMA_CTX_CB(ctx, buffer_process, grp_id, buf))
+#define hailo15_video_node_buffer_queue(ctx, grp_id, buf)                            \
+	(HAILO15_DMA_CTX_CB(ctx, buffer_queue, grp_id, buf))
 #define hailo15_video_node_get_frame_count(ctx, grp_id, fc)                            \
 	(HAILO15_DMA_CTX_CB(ctx, get_frame_count, grp_id, grp_id, fc))
 #define hailo15_video_node_get_rmem(ctx, grp_id, rmem)                                 \
@@ -97,6 +97,9 @@ enum hailo15_video_path {
 
 #define hailo15_dma_buffer_done(ctx, grp_id, buf)                              \
 	(HAILO15_DMA_CTX_CB(ctx, buffer_done, grp_id, buf, grp_id))
+
+#define hailo15_dma_buffer_dequeue(ctx, grp_id, buf)                              \
+	(HAILO15_DMA_CTX_CB(ctx, buffer_dequeue, grp_id, buf, grp_id))
 
 #define hailo15_video_node_get_vsm(ctx, grp_id, index, vsm)                    \
 	(HAILO15_DMA_CTX_CB(ctx, get_vsm, grp_id, grp_id, index, vsm))
@@ -121,6 +124,12 @@ enum hailo15_pix_planarity {
 	INTERLEAVED,
 	SEMI_PLANAR,
 	PLANAR,
+};
+
+enum HDR_TIMESTAMP_MODE {
+    HDR_TIMESTAMP_MODE_OFF = 0,
+    HDR_TIMESTAMP_MODE_ON = 1,
+    HDR_TIMESTAMP_MODE_MAX
 };
 
 struct hailo15_video_plane {
@@ -227,10 +236,77 @@ static const struct hailo15_video_fmt __hailo15_out_formats[] = {
 			.hscale_ratio = 1,
 			} },
 	},
+	{
+		.fourcc = V4L2_PIX_FMT_SGBRG12,
+		.code = MEDIA_BUS_FMT_SGBRG12_1X12,
+		.pix_fmt = RAW12,
+		.planarity = INTERLEAVED,
+		.num_planes = 1,
+		.width_modulus = 16,
+		.planes = { {
+			.bpp = 2,
+			.vscale_ratio = 1,
+			.hscale_ratio = 1,
+			} },
+	},
+	{
+		.fourcc = V4L2_PIX_FMT_SGBRG12,
+		.code = MEDIA_BUS_FMT_SGBRG12_3X12,
+		.pix_fmt = RAW12,
+		.planarity = INTERLEAVED,
+		.num_planes = 3,
+		.width_modulus = 16,
+		.planes = { {
+			.bpp = 2,
+			.vscale_ratio = 1,
+			.hscale_ratio = 1,
+			},
+			{
+			.bpp = 2,
+			.vscale_ratio = 1,
+			.hscale_ratio = 1,
+			},
+			{
+			.bpp = 2,
+			.vscale_ratio = 1,
+			.hscale_ratio = 1,
+			} },
+	},
+	{
+		.fourcc = V4L2_PIX_FMT_SGBRG12,
+		.code = MEDIA_BUS_FMT_SGBRG12_2X12,
+		.pix_fmt = RAW12,
+		.planarity = INTERLEAVED,
+		.num_planes = 2,
+		.width_modulus = 16,
+		.planes = { {
+			.bpp = 2,
+			.vscale_ratio = 1,
+			.hscale_ratio = 1,
+			},
+			{
+			.bpp = 2,
+			.vscale_ratio = 1,
+			.hscale_ratio = 1,
+			} },
+	},
 
 };
 
 static const struct hailo15_video_fmt __hailo15_formats[] = {
+	{
+		.fourcc = V4L2_PIX_FMT_YVYU,
+		.code = MEDIA_BUS_FMT_YVYU8_2X8,
+		.pix_fmt = YUV422,
+		.planarity = INTERLEAVED,
+		.num_planes = 1,
+		.width_modulus = 2,
+		.planes = { {
+			.bpp = 2,
+			.vscale_ratio = 1,
+			.hscale_ratio = 1,
+		} },
+	},
 	{
 		.fourcc = V4L2_PIX_FMT_YUYV,
 		.code = MEDIA_BUS_FMT_YUYV8_1X16,
@@ -344,6 +420,60 @@ static const struct hailo15_video_fmt __hailo15_formats[] = {
 			.hscale_ratio = 1,
 			} },
 	},
+	{
+		.fourcc = V4L2_PIX_FMT_SGBRG12,
+		.code = MEDIA_BUS_FMT_SGBRG12_1X12,
+		.pix_fmt = RAW12,
+		.planarity = INTERLEAVED,
+		.num_planes = 1,
+		.width_modulus = 16,
+		.planes = { {
+			.bpp = 2,
+			.vscale_ratio = 1,
+			.hscale_ratio = 1,
+			} },
+	},
+	{
+		.fourcc = V4L2_PIX_FMT_SGBRG12,
+		.code = MEDIA_BUS_FMT_SGBRG12_3X12,
+		.pix_fmt = RAW12,
+		.planarity = INTERLEAVED,
+		.num_planes = 3,
+		.width_modulus = 16,
+		.planes = { {
+			.bpp = 2,
+			.vscale_ratio = 1,
+			.hscale_ratio = 1,
+			},
+			{
+			.bpp = 2,
+			.vscale_ratio = 1,
+			.hscale_ratio = 1,
+			},
+			{
+			.bpp = 2,
+			.vscale_ratio = 1,
+			.hscale_ratio = 1,
+			} },
+	},
+	{
+		.fourcc = V4L2_PIX_FMT_SGBRG12,
+		.code = MEDIA_BUS_FMT_SGBRG12_2X12,
+		.pix_fmt = RAW12,
+		.planarity = INTERLEAVED,
+		.num_planes = 2,
+		.width_modulus = 16,
+		.planes = { {
+			.bpp = 2,
+			.vscale_ratio = 1,
+			.hscale_ratio = 1,
+			},
+			{
+			.bpp = 2,
+			.vscale_ratio = 1,
+			.hscale_ratio = 1,
+			} },
+	},
 };
 
 static inline const struct hailo15_video_fmt *hailo15_get_out_formats(void){
@@ -393,7 +523,7 @@ struct hailo15_buf_ctx {
 };
 
 struct hailo15_dma_ctx {
-	struct hailo15_buf_ctx buf_ctx[VID_GRP_MAX];
+	struct hailo15_buf_ctx buf_ctx[HAILO15_VID_GRP_MAX];
 	void *dev;
 };
 
@@ -495,6 +625,8 @@ struct hailo15_mux_interrupt_cfg {
 };
 
 struct hailo15_buf_ops {
+	int (*buffer_queue) (struct hailo15_dma_ctx *ctx, struct hailo15_buffer *buf); /* VIDEO -> DMA */
+	int (*buffer_dequeue) (struct hailo15_dma_ctx *ctx, struct hailo15_buffer *buf, int grp_id); /* DMA -> VIDEO */
 	int (*buffer_process)(struct hailo15_dma_ctx *ctx,
 				  struct hailo15_buffer *buf); /* VIDEO -> DMA */
 	int (*buffer_done)(struct hailo15_dma_ctx *ctx,
@@ -522,6 +654,148 @@ struct hailo15_buf_ops {
 #ifndef ALIGN_UP
 #define ALIGN_UP(x, align) (((x) + (align)-1) & ~(align - 1))
 #endif
+
+enum hailo15_isp_path {
+	ISP_MP,
+	ISP_SP2,
+	ISP_MCM_IN,
+	ISP_MAX_PATH,
+};
+
+static inline int HAILO15_VID_GRP_TO_ISP_PATH(int grp_id)
+{
+	switch (grp_id) {
+	case HAILO15_VID_GRP_SX_CSI0_ISP_MP:
+	case HAILO15_VID_GRP_SX_CSI1_ISP_MP:
+		return ISP_MP;
+	case HAILO15_VID_GRP_SX_CSI0_ISP_SP:
+	case HAILO15_VID_GRP_SX_CSI1_ISP_SP:
+		return ISP_SP2;
+	case HAILO15_VID_GRP_MCM_IN:
+		return ISP_MCM_IN;
+	default:
+		return -1;
+	}
+}
+
+static inline bool hailo15_is_p2a_wildcard_vc_grp_id(int grp_id)
+{
+	switch(grp_id) {
+		case HAILO15_VID_GRP_SX_CSI0_P2A:
+		case HAILO15_VID_GRP_SX_CSI1_P2A:
+			return true;
+		default:
+			return false;
+	}
+}
+
+static inline bool hailo15_is_p2a_grp_id(int grp_id)
+{
+	switch(grp_id) {
+		case HAILO15_VID_GRP_SX_CSI0_P2A:
+		case HAILO15_VID_GRP_S0_CSI0_P2A:
+		case HAILO15_VID_GRP_S1_CSI0_P2A:
+		case HAILO15_VID_GRP_S2_CSI0_P2A:
+		case HAILO15_VID_GRP_S3_CSI0_P2A:
+		case HAILO15_VID_GRP_SX_CSI1_P2A:
+		case HAILO15_VID_GRP_S0_CSI1_P2A:
+		case HAILO15_VID_GRP_S1_CSI1_P2A:
+		case HAILO15_VID_GRP_S2_CSI1_P2A:
+		case HAILO15_VID_GRP_S3_CSI1_P2A:
+			return true;
+		default:
+			return false;
+	}
+}
+
+static inline bool hailo15_is_isp_grp_id(int grp_id)
+{
+	switch(grp_id) {
+		case HAILO15_VID_GRP_SX_CSI0_ISP_MP:
+		case HAILO15_VID_GRP_SX_CSI0_ISP_SP:
+		case HAILO15_VID_GRP_SX_CSI1_ISP_MP:
+		case HAILO15_VID_GRP_SX_CSI1_ISP_SP:
+		case HAILO15_VID_GRP_MCM_IN:
+			return true;
+		default:
+			return false;
+	}
+}
+
+static inline int hailo15_grp_id_to_pipe_id(int grp_id)
+{
+	switch(grp_id) {
+		case HAILO15_VID_GRP_SX_CSI0_ISP_MP:
+		case HAILO15_VID_GRP_SX_CSI0_ISP_SP:
+		case HAILO15_VID_GRP_SX_CSI1_ISP_MP:
+		case HAILO15_VID_GRP_SX_CSI1_ISP_SP:
+		case HAILO15_VID_GRP_SX_CSI0_P2A:
+		case HAILO15_VID_GRP_SX_CSI1_P2A:
+		case HAILO15_VID_GRP_MCM_IN:
+			return 0;
+		case HAILO15_VID_GRP_S0_CSI0_P2A:
+		case HAILO15_VID_GRP_S1_CSI0_P2A:
+		case HAILO15_VID_GRP_S2_CSI0_P2A:
+		case HAILO15_VID_GRP_S3_CSI0_P2A:
+			return grp_id - HAILO15_VID_GRP_S0_CSI0_P2A;
+		case HAILO15_VID_GRP_S0_CSI1_P2A:
+		case HAILO15_VID_GRP_S1_CSI1_P2A:
+		case HAILO15_VID_GRP_S2_CSI1_P2A:
+		case HAILO15_VID_GRP_S3_CSI1_P2A:
+			return grp_id - HAILO15_VID_GRP_S0_CSI1_P2A;
+		default:
+			return HAILO15_VID_GRP_INVALID;
+	}
+}
+
+static inline bool is_hdr_capable(int grp_id)
+{
+	switch(grp_id) {
+		case HAILO15_VID_GRP_SX_CSI0_P2A:
+		case HAILO15_VID_GRP_SX_CSI1_P2A:
+			return true;
+		default:
+			return false;
+	}
+}
+
+static inline char* hailo15_grp_id_to_str(int grp_id)
+{
+	switch(grp_id) {
+		case HAILO15_VID_GRP_SX_CSI0_ISP_MP:
+			return "sx-csi0-isp-mp";
+		case HAILO15_VID_GRP_SX_CSI0_ISP_SP:
+			return "sx-csi0-isp-sp";
+		case HAILO15_VID_GRP_SX_CSI1_ISP_MP:
+			return "sx-csi1-isp-mp";
+		case HAILO15_VID_GRP_SX_CSI1_ISP_SP:
+			return "sx-csi1-isp-sp";
+		case HAILO15_VID_GRP_SX_CSI0_P2A:
+			return "sx-csi0-p2a";
+		case HAILO15_VID_GRP_SX_CSI1_P2A:
+			return "sx-csi1-p2a";
+		case HAILO15_VID_GRP_MCM_IN:
+			return "mcm-in";
+		case HAILO15_VID_GRP_S0_CSI0_P2A:
+			return "s0-csi0-p2a";
+		case HAILO15_VID_GRP_S1_CSI0_P2A:
+			return "s1-csi0-p2a";
+		case HAILO15_VID_GRP_S2_CSI0_P2A:
+			return "s2-csi0-p2a";
+		case HAILO15_VID_GRP_S3_CSI0_P2A:
+			return "s3-csi0-p2a";
+		case HAILO15_VID_GRP_S0_CSI1_P2A:
+			return "s0-csi1-p2a";
+		case HAILO15_VID_GRP_S1_CSI1_P2A:
+			return "s1-csi1-p2a";
+		case HAILO15_VID_GRP_S2_CSI1_P2A:
+			return "s2-csi1-p2a";
+		case HAILO15_VID_GRP_S3_CSI1_P2A:
+			return "s3-csi1-p2a";
+		default:
+			return "invalid-vid";
+	}
+}
 
 int hailo15_v4l2_notifier_bound(struct v4l2_async_notifier *,
 				struct v4l2_subdev *,

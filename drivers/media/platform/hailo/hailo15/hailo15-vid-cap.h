@@ -17,7 +17,7 @@
 
 #define MAX_NUM_FORMATS (8)
 #define MAX_SUBDEVS_NUM (8)
-#define MAX_VIDEO_NODE_NUM (5)
+#define MAX_VIDEO_NODE_NUM (64)
 #define CONFIG_HAILO_DEVICE_TPG
 #define CONFIG_HAILO_DEVICE_TPG_USE_FILE
 
@@ -43,7 +43,7 @@ struct hailo15_video_node {
 
 	struct hailo15_event_resource event_resource;
 
-	struct mutex  qlock;
+	struct mutex qlock;
 	struct list_head buf_queue;
 	bool skip_first_list_entry;
 
@@ -59,6 +59,8 @@ struct hailo15_video_node {
 	int path;
 	int sequence;
 	int pipeline_init;
+	int hdr_timestamp_mode;
+	bool tuning_state;
 	wait_queue_head_t stream_wait;
 };
 

@@ -15,13 +15,13 @@
 #include <linux/kernel.h>
 #include <linux/align.h>
 #include <linux/io.h>
-#include <linux/reset.h>
 #include <linux/mailbox_client.h>
 #include <linux/kernel.h>
 #include <linux/irqreturn.h>
 #include <linux/of_address.h>
 #include <linux/of_reserved_mem.h>
 #include <linux/slab.h>
+#include <linux/pm_runtime.h>
 
 void _dsp_config_writel(struct xvp *xvp, size_t offset, u32 value)
 {
@@ -136,30 +136,18 @@ static int dsp_poweron(struct xvp *xvp)
         goto exit;
     }
 
-    dsp_config_poweroff(xvp);
-
     ret = clk_set_rate(xvp->dsp_clock, pll_rate);
     if (ret) {
         dev_err(xvp->dev, "Error in clock set rate (%d)\n", ret);
         goto exit;
     }
 
-    ret = clk_prepare_enable(xvp->dsp_config_clock);
-    if (ret) {
-        dev_err(xvp->dev, "Error in clock prepare/enable (%d)\n", ret);
-        goto exit;
-    }
-
-    ret = 0;
-
 exit:
     return ret;
 }
 
-static int dsp_poweroff(struct xvp *xvp)
+static void dsp_poweroff(struct xvp *xvp)
 {
-    int ret;
-
     dev_dbg(xvp->dev, "DSP Poweroff\n");
 
     // Linux prints a warning if we try to 
@@ -167,17 +155,6 @@ static int dsp_poweroff(struct xvp *xvp)
     if (__clk_is_enabled(xvp->dsp_clock)) {
         clk_disable_unprepare(xvp->dsp_clock);
     }
-
-    dsp_config_poweroff(xvp);
-
-    ret = reset_control_assert(xvp->dsp_reset);
-    if (ret) {
-        xvp->state = DSP_STATE_FATAL_ERROR;
-        dev_err(xvp->dev, "Failed to assert reset (%d)\n", ret);
-        return ret;
-    }
-
-    return 0;
 }
 
 bool xrp_is_cmd_complete(struct xvp *xvp, struct xrp_comm *xrp_comm)
@@ -287,12 +264,12 @@ static void xrp_destroy_mbox(struct xvp *xvp)
 }
 
 int xrp_enable_dsp(struct xvp *xvp)
-{   
-    int ret = reset_control_deassert(xvp->dsp_reset);
-    if (ret) {
-        dev_err(xvp->dev, "failed to deassert reset (%d)\n", ret);
-        goto exit;
-    }
+{
+    int ret;
+
+    dev_dbg(xvp->dev, "Enable DSP\n");
+
+    pm_runtime_get_sync(xvp->dev);
 
     ret = dsp_config_poweron(xvp);
     if (ret) {
@@ -326,11 +303,17 @@ exit:
     return ret;
 }
 
-int xrp_disable_dsp(struct xvp *xvp)
+void xrp_disable_dsp(struct xvp *xvp)
 {
+    dev_dbg(xvp->dev, "Disable DSP\n");
+
     xrp_destroy_mbox(xvp);
 
-    return dsp_poweroff(xvp);
+    dsp_poweroff(xvp);
+
+    dsp_config_poweroff(xvp);
+
+    pm_runtime_put_sync(xvp->dev);
 }
 
 void xrp_halt_dsp(struct xvp *xvp)
@@ -392,13 +375,6 @@ long xrp_init_hw_common(struct platform_device *pdev, struct xvp *xvp)
     xvp->dsp_config = devm_ioremap_resource(&pdev->dev, mem);
     if (IS_ERR(xvp->dsp_config)) {
         ret = dev_err_probe(&pdev->dev, PTR_ERR(xvp->dsp_config), "Error in mapping dsp_config\n");
-        goto err;
-    }
-
-    dev_dbg(&pdev->dev, "Requesting reset object\n");
-    xvp->dsp_reset = reset_control_get_exclusive(&pdev->dev, "dsp-reset");
-    if (IS_ERR(xvp->dsp_reset)) {
-        ret = dev_err_probe(&pdev->dev, PTR_ERR(xvp->dsp_reset), "Error in getting reset object\n");
         goto err;
     }
 

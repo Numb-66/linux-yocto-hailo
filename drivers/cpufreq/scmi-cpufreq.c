@@ -25,10 +25,62 @@ struct scmi_data {
 	int nr_opp;
 	struct device *cpu_dev;
 	cpumask_var_t opp_shared_cpus;
+	struct notifier_block scmi_perf_level_report_nb;
+	struct notifier_block scmi_perf_limits_report_nb;
+	struct cpufreq_policy *policy;
 };
-
+struct scmi_device *scmi_dev;
 static struct scmi_protocol_handle *ph;
 static const struct scmi_perf_proto_ops *perf_ops;
+static const struct scmi_notify_ops *notify_ops;
+
+
+static int scmi_perf_level_report_notifier(struct notifier_block *nb, unsigned long val, void *data)
+{
+	struct scmi_perf_level_report *report = data;
+	struct scmi_data *priv = container_of(nb, struct scmi_data, scmi_perf_level_report_nb);
+	const struct scmi_perf_domain_info *info;
+
+	info = perf_ops->info_get(ph, report->domain_id);
+	if (!IS_ERR(info)) {
+		pr_info("%s throttling level report %d\n", info->name, report->performance_level);
+	}
+
+	if (report->domain_id != priv->domain_id)
+		return NOTIFY_OK;
+
+	dev_dbg(priv->cpu_dev, "CPU %*pbl Throttling level report: %d \n",
+			cpumask_pr_args(priv->policy->real_cpus), report->performance_level);
+
+	priv->policy->cur = report->performance_level/1000;
+
+	return NOTIFY_OK;
+}
+
+
+static int scmi_perf_limits_report_notifier(struct notifier_block *nb, unsigned long val, void *data)
+{
+	struct scmi_perf_limits_report *report = data;
+	struct scmi_data *priv = container_of(nb, struct scmi_data, scmi_perf_limits_report_nb);
+	const struct scmi_perf_domain_info *info;
+
+	info = perf_ops->info_get(ph, report->domain_id);
+	if (!IS_ERR(info)) {
+		pr_info("%s throttling limits report [%u - %u]\n", info->name, report->range_min, report->range_max);
+	}
+
+	if (report->domain_id != priv->domain_id)
+		return NOTIFY_OK;
+
+	dev_dbg(priv->cpu_dev, "CPU %*pbl Throttling limits report: [%u - %u] \n",
+			cpumask_pr_args(priv->policy->real_cpus), report->range_min, report->range_max);
+
+	priv->policy->min = report->range_min / 1000;
+	priv->policy->max = report->range_max / 1000;
+
+	return NOTIFY_OK;
+}
+
 
 static unsigned int scmi_cpufreq_get_rate(unsigned int cpu)
 {
@@ -220,6 +272,32 @@ static int scmi_cpufreq_init(struct cpufreq_policy *policy)
 	policy->fast_switch_possible =
 		perf_ops->fast_switch_possible(ph, cpu_dev);
 
+
+	priv->scmi_perf_level_report_nb.notifier_call = scmi_perf_level_report_notifier;
+	ret = notify_ops->devm_event_notifier_register(scmi_dev,
+				SCMI_PROTOCOL_PERF, SCMI_EVENT_PERFORMANCE_LEVEL_CHANGED,
+				NULL, // all domains (replace with priv->domain_id after adding scmi-devfreq.c)
+				&priv->scmi_perf_level_report_nb);
+	if (ret) {
+		dev_err(priv->cpu_dev,
+			"Error in registering perf level notifier for %s, err %d",
+			scmi_dev->name, ret);
+		return ret;
+	}
+
+	priv->scmi_perf_limits_report_nb.notifier_call = scmi_perf_limits_report_notifier;
+	ret = notify_ops->devm_event_notifier_register(scmi_dev,
+				SCMI_PROTOCOL_PERF, SCMI_EVENT_PERFORMANCE_LIMITS_CHANGED,
+				NULL, // all domains (replace with priv->domain_id after adding scmi-devfreq.c)
+				&priv->scmi_perf_limits_report_nb);
+	if (ret) {
+		dev_err(priv->cpu_dev,
+			"Error in registering perf limits notifier for %s, err %d",
+			scmi_dev->name, ret);
+		return ret;
+	}
+	priv->policy = policy;
+
 	return 0;
 
 out_free_opp:
@@ -267,12 +345,42 @@ static void scmi_cpufreq_register_em(struct cpufreq_policy *policy)
 				    power_scale_mw);
 }
 
+int	scmi_cpufreq_frequency_table_verify(struct cpufreq_policy_data *policy)
+{
+	struct device *cpu_dev;
+	int domain_id, min, max;
+
+	cpu_dev = get_cpu_device(policy->cpu);
+	if (!cpu_dev) {
+		pr_err("failed to get cpu%d device\n", policy->cpu);
+		return -ENODEV;
+	}
+
+	domain_id = perf_ops->device_domain_id(cpu_dev);
+
+	pr_debug("scmi-verify: cpu[%u], max[%u], min[%u], max_freq[%u], min_freq[%u]\n", 
+	 	policy->cpu, policy->max, policy->min, policy->cpuinfo.max_freq, policy->cpuinfo.min_freq);
+
+	if (!policy->freq_table)
+		return -ENODEV;
+
+	perf_ops->limits_get(ph, domain_id, &max, &min);
+	policy->max = max / 1000;
+	policy->min = min / 1000;
+	cpufreq_verify_within_cpu_limits(policy);
+
+	pr_debug("scmi-verify: cpu[%u], max[%u], min[%u], max_freq[%u], min_freq[%u]\n", 
+	 	policy->cpu, policy->max, policy->min, policy->cpuinfo.max_freq, policy->cpuinfo.min_freq);
+
+	return 0;
+}
+
 static struct cpufreq_driver scmi_cpufreq_driver = {
 	.name	= "scmi",
 	.flags	= CPUFREQ_HAVE_GOVERNOR_PER_POLICY |
 		  CPUFREQ_NEED_INITIAL_FREQ_CHECK |
 		  CPUFREQ_IS_COOLING_DEV,
-	.verify	= cpufreq_generic_frequency_table_verify,
+	.verify	= scmi_cpufreq_frequency_table_verify,
 	.attr	= cpufreq_generic_attr,
 	.target_index	= scmi_cpufreq_set_target,
 	.fast_switch	= scmi_cpufreq_fast_switch,
@@ -289,6 +397,7 @@ static int scmi_cpufreq_probe(struct scmi_device *sdev)
 	const struct scmi_handle *handle;
 
 	handle = sdev->handle;
+	scmi_dev = sdev;
 
 	if (!handle)
 		return -ENODEV;
@@ -296,6 +405,8 @@ static int scmi_cpufreq_probe(struct scmi_device *sdev)
 	perf_ops = handle->devm_protocol_get(sdev, SCMI_PROTOCOL_PERF, &ph);
 	if (IS_ERR(perf_ops))
 		return PTR_ERR(perf_ops);
+
+	notify_ops = handle->notify_ops;
 
 #ifdef CONFIG_COMMON_CLK
 	/* dummy clock provider as needed by OPP if clocks property is used */
