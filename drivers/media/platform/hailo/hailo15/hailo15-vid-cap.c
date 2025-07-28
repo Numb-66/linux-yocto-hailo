@@ -825,8 +825,8 @@ static long hailo15_video_node_unlocked_ioctl(struct file *file,
 			ret = -EINVAL;
 			break;
 		}
-		if(timestamp_mode != TRUE &&
-		   timestamp_mode != FALSE) {
+		if(timestamp_mode != HDR_TIMESTAMP_MODE_ON &&
+		   timestamp_mode != HDR_TIMESTAMP_MODE_OFF) {
 			pr_err("%s - invalid timestamp_mode %d\n", __func__, timestamp_mode);
 			ret = -EINVAL;
 			break;
@@ -1230,12 +1230,8 @@ static int hailo15_video_device_buffer_done(struct hailo15_dma_ctx *ctx,
 	if (vid_node->prev_buf) {
 		vid_node->prev_buf->vb.sequence = vid_node->sequence++;
 
-		/* Write timestamp only if you should not forward it:
-		 * The first capture device (output to /dev/video2) will take the original timestamp.
-		 * The second capture device (output to /dev/video0) will optionally forward it.
-		 */
 		if (vid_node->hdr_timestamp_mode == HDR_TIMESTAMP_MODE_OFF || hailo15_is_p2a_grp_id(vid_node->path))
-			vid_node->prev_buf->vb.vb2_buf.timestamp = ktime_get_raw_ns();
+			vid_node->prev_buf->vb.vb2_buf.timestamp = ktime_get_ns();
 		vb2_buffer_done(&vid_node->prev_buf->vb.vb2_buf,
 					VB2_BUF_STATE_DONE);
 
@@ -1756,6 +1752,7 @@ static int hailo15_video_init_vid_nodes(struct hailo15_vid_cap_device *vid_dev)
 		vid_node->id = fwnode_ep.port;
 
 		vid_node->prev_buf = NULL;
+		vid_node->hdr_timestamp_mode = HDR_TIMESTAMP_MODE_OFF;
 
 		// read path property so s_stream knows from where it was called
 		ret = fwnode_property_read_u32(ep, "path", &path);

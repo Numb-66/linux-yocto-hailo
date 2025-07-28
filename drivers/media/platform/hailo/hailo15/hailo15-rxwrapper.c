@@ -55,6 +55,7 @@
 #define RXWRAPPER_CSI_OUT_LINE_BUF_CFG 0x13
 
 #define RAW12_DT 0x2c
+#define RAW10_DT 0x2b
 #define YUV422_8b_DT 0x1e
 #define RES_4K_FRAME_LINE_NUM 0x870
 #define RXWRAPPER_MAX_NUM_EXPOSURES 3
@@ -160,7 +161,6 @@
 #define RXWRAPPER_RX_FRAME_DROP_INT_MASK_DEFAULT 0x0
 
 struct rxwrapper_config {
-    uint64_t rxwrapper_vision_ss_null_addr;
     uint32_t rxwrapper_cfg_reg_value;
 
     uint8_t rxwrapper_pipes_data_cfg_dtype_shift;
@@ -193,7 +193,6 @@ struct rxwrapper_config {
 };
 
 static const struct rxwrapper_config hailo15_rxwrapper_config = {
-    .rxwrapper_vision_ss_null_addr = 0x60700000,
     .rxwrapper_cfg_reg_value = 0xf101,
     .rxwrapper_pipes_data_cfg_dtype_shift = 3,
     .rxwrapper_pipes_data_cfg_wc_vc_shift = 9,
@@ -225,7 +224,6 @@ static const struct rxwrapper_config hailo15_rxwrapper_config = {
 };
 
 static const struct rxwrapper_config hailo15l_rxwrapper_config = {
-    .rxwrapper_vision_ss_null_addr = 0x60C00000,
     .rxwrapper_cfg_reg_value = 0x7e180,
     .rxwrapper_pipes_data_cfg_dtype_shift = 5,
     .rxwrapper_pipes_data_cfg_wc_vc_shift = 11,
@@ -317,6 +315,7 @@ struct hailo15_rxwrapper_priv {
 	atomic_t num_works_processing;
 	
 	const struct rxwrapper_config *rxwrapper_cfg;
+	uint64_t vision_ss_null_addr;
 	void *private_data[HAILO15_VID_GRP_MAX];
 	int id; /* rxwrapper id: 0/1/... */
 	int irq;
@@ -721,7 +720,7 @@ static int __maybe_unused hailo15_rxwrapper_pipe_set_data_address_or_null(
 	buf = hailo15_rxwrapper->next_buf[grp_id];
 	config_address = buf ? 
 		buf->dma[plane_idx] : 
-		hailo15_rxwrapper->rxwrapper_cfg->rxwrapper_vision_ss_null_addr;
+		hailo15_rxwrapper->vision_ss_null_addr;
 	return hailo15_rxwrapper_pipe_set_data_address(hailo15_rxwrapper, pipe, config_address);
 }
 
@@ -978,7 +977,7 @@ int hailo15_rxwrapper_set_stream(struct v4l2_subdev *sd, int enable)
 			pipe = real_pipe + i;
 			hailo15_rxwrapper_pipe_apply_cfg(hailo15_rxwrapper, pipe, sd->grp_id);
 			hailo15_rxwrapper_pipe_enable_credits(hailo15_rxwrapper, pipe, &rxwrapper_chosen_credits_cfg);
-			hailo15_rxwrapper_pipe_set_data_address(hailo15_rxwrapper, pipe, hailo15_rxwrapper->rxwrapper_cfg->rxwrapper_vision_ss_null_addr);
+			hailo15_rxwrapper_pipe_set_data_address(hailo15_rxwrapper, pipe, hailo15_rxwrapper->vision_ss_null_addr);
 			hailo15_rxwrapper_pipe_init(hailo15_rxwrapper, pipe);
 		}
 		for (i = 0; i < hailo15_rxwrapper->num_exposures; i++) {
@@ -1276,7 +1275,7 @@ static int hailo15_rxwrapper_queue_empty(struct hailo15_dma_ctx *ctx,
 	for (i = 0; i < hailo15_rxwrapper->num_exposures; i++) {
 		pipe = real_pipe + i;
 		hailo15_rxwrapper_pipe_set_data_address(hailo15_rxwrapper, pipe,
-			hailo15_rxwrapper->rxwrapper_cfg->rxwrapper_vision_ss_null_addr);
+			hailo15_rxwrapper->vision_ss_null_addr);
 	}
 
 	/* Delete all list elements - and dequeue them back to the userspace */
@@ -1446,7 +1445,7 @@ void hailo15_rxwrapper_buffer_done(struct hailo15_rxwrapper_priv *hailo15_rxwrap
 		/* Pass buffer back to userspace (deferred work - outside of critical section) */
 		spin_unlock_irqrestore(&hailo15_rxwrapper->buf_lock, flags);
 		if (dequeued_buf) {
-			dequeued_buf->vb.vb2_buf.timestamp = ktime_get_raw_ns();
+			dequeued_buf->vb.vb2_buf.timestamp = ktime_get_ns();
 			dequeue_buffer_with_deferred_work(hailo15_rxwrapper, ctx, grp_id, dequeued_buf);
 		}
 	}
@@ -1885,6 +1884,42 @@ hailo15_rxwrapper_dma_ctx_clean_all(struct hailo15_dma_ctx *ctx)
 	return 0;
 }
 
+static int hailo15_rxwrapper_parse_null_addr(struct hailo15_rxwrapper_priv* hailo15_rxwrapper) {
+	struct fwnode_handle *rxwrapper_node = NULL, *parent_node = NULL;
+	uint32_t null_addr = 0;
+	int ret = -EINVAL;
+
+	if (!hailo15_rxwrapper || !hailo15_rxwrapper->dev) {
+		pr_err("%s: Invalid hailo15_rxwrapper or hailo15_rxwrapper->dev pointer\n", __func__);
+		return -EINVAL;
+	}
+
+	rxwrapper_node = dev_fwnode(hailo15_rxwrapper->dev);
+	if (!rxwrapper_node) {
+		dev_err(hailo15_rxwrapper->dev, "Failed to get fwnode for rxwrapper device\n");
+		return -ENODEV;
+	}
+
+	parent_node = fwnode_get_parent(rxwrapper_node);
+	if (!parent_node) {
+		dev_err(hailo15_rxwrapper->dev, "Failed to get parent fwnode (vision_subsys)\n");
+		return -ENODEV;
+	}
+
+	// Read the property from the *parent* node
+	ret = fwnode_property_read_u32(parent_node, "null-addr", &null_addr);
+	if (ret) {
+		dev_err(hailo15_rxwrapper->dev, "Failed to read 'null-addr' from parent node. ret: %d\n", ret);
+	} else {
+		dev_dbg(hailo15_rxwrapper->dev, "Successfully read null_addr=0x%x from parent node\n", null_addr);
+	hailo15_rxwrapper->vision_ss_null_addr = null_addr;
+	}
+
+	fwnode_handle_put(parent_node);
+
+	return ret;
+}
+
 int hailo15_rxwrapper_probe(struct platform_device *pdev)
 {
 	int ret, pipe;
@@ -1914,7 +1949,7 @@ int hailo15_rxwrapper_probe(struct platform_device *pdev)
 		return -ENOMEM;
 	}
 
-	hailo15_rxwrapper->rxwrapper_cfg  = of_device_get_match_data(&pdev->dev);
+	hailo15_rxwrapper->rxwrapper_cfg = of_device_get_match_data(&pdev->dev);
 	if (!hailo15_rxwrapper->rxwrapper_cfg ) {
 		dev_err(&pdev->dev, "No rxwrapper_cfg match found\n");
 		return -EINVAL;
@@ -2000,6 +2035,12 @@ int hailo15_rxwrapper_probe(struct platform_device *pdev)
 		 "hailo15_rxwrapper.%d", hailo15_rxwrapper->id);
 	/*hailo15_rxwrapper->sd.flags |= V4L2_SUBDEV_FL_HAS_EVENTS;*/
 	hailo15_rxwrapper->sd.entity.function = MEDIA_ENT_F_VID_MUX;
+
+    ret = hailo15_rxwrapper_parse_null_addr(hailo15_rxwrapper);
+    if (ret) {
+        dev_err(&pdev->dev, "Failed to parse null address\n");
+        return ret;
+    }
 
 	hailo15_rxwrapper->pads[RXWRAPPER_SINK_PAD_0].flags = MEDIA_PAD_FL_SINK;
 	for (i = RXWRAPPER_SOURCE_PAD_1; i < RXWRAPPER_PAD_MAX; i++) {
