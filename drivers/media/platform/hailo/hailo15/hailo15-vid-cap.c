@@ -1158,6 +1158,15 @@ static int hailo15_video_device_buffer_done(struct hailo15_dma_ctx *ctx,
 		/* not isp flow, we can release buffer immediatly */
 		vid_node->prev_buf = buf;
 	}
+
+	/* Delete buffer from irqlist.
+	   This must happen before the buffer is passed to vb2_buffer_done() and thus can be dequeued by the user
+	   and potentially re-inserted into the irqlist while it is still in the irqlist. */
+	if (buf) {
+		mutex_lock(&vid_node->qlock);
+		list_del(&buf->irqlist);
+		mutex_unlock(&vid_node->qlock);
+	}
 	if (vid_node->prev_buf) {
 		vid_node->prev_buf->vb.sequence = vid_node->sequence++;
 
@@ -1171,12 +1180,6 @@ static int hailo15_video_device_buffer_done(struct hailo15_dma_ctx *ctx,
 					VB2_BUF_STATE_DONE);
 
 		vid_node->prev_buf = NULL;
-	}
-
-	if (buf) {
-		mutex_lock(&vid_node->qlock);
-		list_del(&buf->irqlist);
-		mutex_unlock(&vid_node->qlock);
 	}
 
 	mutex_lock(&vid_node->qlock);
