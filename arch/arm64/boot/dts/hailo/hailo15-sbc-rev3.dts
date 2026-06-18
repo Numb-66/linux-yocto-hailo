@@ -164,6 +164,8 @@
    broken-cd;
    sd-vsel-gpio = <&gpio1 1 GPIO_ACTIVE_HIGH>;
    sd-vsel-polarity-high;
+   /* forbid any 1.8V switch, force plain 3.3V */
+   no-1-8-v;
     phy-config {
         card-is-emmc = <0x0>;
         cmd-pad-values = <0x1 0x3 0x1 0x1>; // txslew_ctrl_n, txslew_ctrl_p, weakpull_enable, rxsel
