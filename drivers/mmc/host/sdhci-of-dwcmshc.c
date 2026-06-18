@@ -828,7 +828,7 @@ static void dwcmshc_hailo15_phy_config(struct sdhci_host *host)
 	reg32 &= ~DWCMSHC_PHY_CNFG__PAD_SN;
 	reg32 |= FIELD_PREP(DWCMSHC_PHY_CNFG__PAD_SN, sdio_phy_config->drive_strength[PAD_SN]);
 	sdhci_writel(host, reg32, DWCMSHC_PHY_CNFG);
-
+#if 0
 	/* In case CMD19(tuning) will be sent - BLOCKSIZE_R, BLOCKCOUNT_R BLOCK_COUNT_ENABLE must be set */	
 	reg16 = sdhci_readw(host, DWCMSHC_BLOCKSIZE_R);
 	reg16 &= ~DWCMSHC_BLOCKSIZE_R__XFER_BLOCK_SIZE;
@@ -857,7 +857,7 @@ static void dwcmshc_hailo15_phy_config(struct sdhci_host *host)
 		reg32 |= FIELD_PREP(DWCMSHC_AT_CTRL_R__SWIN_TH_VAL,0x1f);
 	}
 	sdhci_writel(host, reg32, DWCMSHC_AT_CTRL_R);
-
+#endif
 	pr_debug("%s phy configuration for %s mode done\n", mmc_hostname(host->mmc), sdio_phy_config->card_is_emmc ? "EMMC ": "SD");
 }
 

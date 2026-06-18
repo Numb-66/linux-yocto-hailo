@@ -209,7 +209,9 @@
     compatible = "hailo,dwcmshc-sdhci-0";
     clocks = <&scmi_clk HAILO15_SCMI_CLOCK_IDX_HCLK>, <&scmi_clk HAILO15_SCMI_CLOCK_IDX_SDIO_0_M_HCLK>,
         <&scmi_clk HAILO15_SCMI_CLOCK_IDX_SDIO_0_CLK_DIV_BYPASS>, <&scmi_clk HAILO15_SCMI_CLOCK_IDX_SDIO_0_CARD_CLK>;
-    resets = <&scmi_reset HAILO15_SCMI_RESET_IDX_SDIO_0_CD_FROM_PINMUX>;
+    //resets = <&scmi_reset HAILO15_SCMI_RESET_IDX_SDIO_0_CD_FROM_PINMUX>;
+    resets = <&scmi_reset HAILO15_SCMI_RESET_IDX_SDIO1_8BIT_MUX>;
+    reset-names = "sdio1-8bit-mux";
     clock-names = "core", "bus", "clk_div_bypass","card_clk";
 };
 

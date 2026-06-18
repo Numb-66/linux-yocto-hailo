@@ -74,13 +74,17 @@ int hailo15_dphy_rx_init(struct phy *phy, s64 data_rate)
 		return -EINVAL;
 	}
 
+	dev_dbg(dphy->dev, "writel begin");
 	writel(CDNS_MIPI_DPHY_RX_TX_DIG_TBIT2_VAL,
 		dphy->base + CDNS_MIPI_DPHY_RX_TX_DIG_TBIT2_ADDR_OFFSET);
+	dev_dbg(dphy->dev, "writel begin 1");
 	writel(CDNS_MIPI_DPHY_RX_TX_DIG_TBIT3_VAL,
 		dphy->base + CDNS_MIPI_DPHY_RX_TX_DIG_TBIT3_ADDR_OFFSET);
+	dev_dbg(dphy->dev, "writel begin 2");
 	writel(CDNS_MIPI_DPHY_RX_CMN_DIG_TBIT2_VAL,
 		dphy->base + CDNS_MIPI_DPHY_RX_CMN_DIG_TBIT2_ADDR_OFFSET);
 
+	dev_dbg(dphy->dev, "hailo15_dphy_calc_phy_band_control");
 	phy_band_control = hailo15_dphy_calc_phy_band_control(data_rate);
 
 	dev_dbg(dphy->dev, "%s - set dphy rate from DTS to 0x%x\n", __func__, phy_band_control);

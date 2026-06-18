@@ -420,9 +420,9 @@
         watchdog@7c2c1000 {
             compatible = "arm,sp805", "arm,primecell";
             reg = <0 0x7c2c1000 0 0x1000>;
-                    clocks = <&scmi_clk HAILO15_SCMI_CLOCK_IDX_HCLK>, <&scmi_clk HAILO15_SCMI_CLOCK_IDX_HCLK>;
+            clocks = <&scmi_clk HAILO15_SCMI_CLOCK_IDX_HCLK>, <&scmi_clk HAILO15_SCMI_CLOCK_IDX_HCLK>;
             clock-names = "wdog_clk", "apb_pclk";
-                    timeout-sec = <10>;
+            timeout-sec = <10>;
         };
 
         sdio0: sdio0@78000000 {

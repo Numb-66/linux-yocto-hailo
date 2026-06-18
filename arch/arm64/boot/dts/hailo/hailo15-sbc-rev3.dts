@@ -12,7 +12,22 @@
         device_type = "memory";
         reg = <0x00000000 0x80000000 0x00000000 0x80000000>;
     };
+
+    aliases {
+        i2c0 = &i2c_0;
+        i2c1 = &i2c_1;
+        i2c3 = &i2c_3;
+    };
 };
+&pinctrl {
+    cam_reset_pin_ctrl: cam-reset-pin-ctrl {
+        function = "gpio";
+        groups = "gpio10_grp";
+        //drive-strength = <2>;
+        //bias-pull-up;
+    };
+};
+
 
 &i2c_0 {
     status = "ok";
@@ -20,14 +35,17 @@
 
     sensor_0: camera-sensor@1a {
         status = "ok";
-        compatible = "sony,imx334", "sony,imx664", "sony,imx675", "sony,imx678", "sony,imx715";
+        //compatible = "sony,imx334", "sony,imx664", "sony,imx675", "sony,imx678", "sony,imx715";
+        compatible = "sony,imx678";
         reg = <0x1a>;
         clocks = <&sensor_clk>;
         clock-names = "inclk";
         clock-frequency = <24000000>;
         csi-id = <0>;
-        reset-gpios = <&gpio0 4 GPIO_ACTIVE_HIGH>;
-        xmaster-gpios = <&gpio0 3 GPIO_ACTIVE_HIGH>;
+        pinctrl-names = "default";
+        //pinctrl-0 = <&cam_reset_pin_ctrl>;
+        reset-gpios = <&gpio0 10 GPIO_ACTIVE_HIGH>;
+       // xmaster-gpios = <&gpio0 3 GPIO_ACTIVE_HIGH>;
         port {
             sensor_out_csi2rx: endpoint {
                 data-lanes = <1 2 3 4>;
@@ -41,7 +59,7 @@
 &i2c_1 {
     status = "ok";
     i2c-sda-falling-time-ns = <1000>;
-
+/*
     ina231_1v8: 1v8@48 {
         compatible = "ti,ina231_precise";
         reg = <0x48>;
@@ -60,7 +78,7 @@
         shunt-resistor = <1000>;
         max-current = <11755>;
     };
-/*     ina231_0v6: 0v6@45 {
+     ina231_0v6: 0v6@45 {
        compatible = "ti,ina231_precise";
        reg = <0x45>;
        shunt-resistor = <50000>;
@@ -85,6 +103,7 @@
         DVDD-supply = <&regulator_1p8v>;
     };
 
+
     regulator_0p8v: regulator-0p8v@43 {
        status = "disabled";
        compatible = "ti,tps62872";
@@ -94,14 +113,19 @@
        regulator-max-microvolt = <1037500>;
        regulator-initial-mode = <2>;
    };
+   rtc@51 {
+        compatible = "nxp,pcf8563";
+        reg = <0x51>;
+        status = "okay";
+   };
 };
 
- &i2c_2 {
-    status = "okay";
-    i2c-sda-falling-time-ns = <190>;
+&i2c_2 {
+    status = "disabled";
     clock-frequency = <400000>;
-    pinctrl-names = "default";
-    pinctrl-0 = <&pinctrl_i2c2>;
+//     pinctrl-names = "default";
+//     pinctrl-0 = <&pinctrl_i2c2>;
+    i2c-sda-falling-time-ns = <190>;
     gyro_lsm6dsr_2: lsm6dsr_2@6a {
         status = "okay";
         compatible = "st,lsm6dsr";
@@ -112,6 +136,23 @@
         interrupts = <5 IRQ_TYPE_LEVEL_HIGH>;
         pinctrl-names = "default";
         pinctrl-0 = <&pinctrl_gpio21>;
+    };
+};
+
+&i2c_3 {
+    status = "okay";
+    pinctrl-names = "default";
+    pinctrl-0 = <&pinctrl_i2c3>;
+    i2c-sda-falling-time-ns = <1000>;
+    es8388: es8388@11 {
+        status = "okay";
+        compatible = "everest,es8388";
+        reg = <0x11>;
+        #sound-dai-cells = <0>;
+        //clocks = <&i2s_cpu_master>;
+        //clock-names = "mclk";
+        AVDD-supply = <&regulator_3p3v>;
+        DVDD-supply = <&regulator_1p8v>;
     };
 };
 
@@ -159,21 +200,23 @@
 };
 
 &sdio0 {
-   status = "okay";
-   bus-width = <4>;
-   broken-cd;
-   sd-vsel-gpio = <&gpio1 1 GPIO_ACTIVE_HIGH>;
-   sd-vsel-polarity-high;
-   /* forbid any 1.8V switch, force plain 3.3V */
-   no-1-8-v;
+    status = "okay";
+    sdhci-caps = <0 0x01000000>;
+    bus-width = <4>;
+    max-frequency = <25000000>;
+    //sd-vsel-gpio = <&gpio1 1 GPIO_ACTIVE_HIGH>;
+    //sd-vsel-polarity-high;
+    cd-gpios = <&gpio0 15 GPIO_ACTIVE_LOW>;
+    //broken-cd;
+    no-1-8-v;
     phy-config {
         card-is-emmc = <0x0>;
         cmd-pad-values = <0x1 0x3 0x1 0x1>; // txslew_ctrl_n, txslew_ctrl_p, weakpull_enable, rxsel
             dat-pad-values = <0x1 0x3 0x1 0x1>; // txslew_ctrl_n, txslew_ctrl_p, weakpull_enable, rxsel
             rst-pad-values = <0x1 0x3 0x1 0x1>; // txslew_ctrl_n, txslew_ctrl_p, weakpull_enable, rxsel
             clk-pad-values = <0x1 0x3 0x0 0x1>; // txslew_ctrl_n, txslew_ctrl_p, weakpull_enable, rxsel
-            sdclkdl-cnfg = <0x1 0x13>; //extdly_en, cckdl_dc
-            drive-strength = <0x8 0x4>; //pad_sp, pad_sn
+            sdclkdl-cnfg = <0x1 0x2F>; //extdly_en, cckdl_dc
+            drive-strength = <0x9 0x8>; //pad_sp, pad_sn
     };
 };
 &sdio1 {
@@ -225,17 +268,35 @@
     simple-audio-card,bitclock-master = <&cpu_dai_master>;
     simple-audio-card,frame-master = <&cpu_dai_master>;
 
+  simple-audio-card,widgets =
+        "Microphone","LINPUT2",
+        "Line","LINPUT2",
+        "Speaker","LOUT2",
+        "Headphone","ROUT2";
+
+  simple-audio-card,routing =
+        "LOUT2","Left Out 2",
+        "Left Out 2","Left Mixer",
+        "ROUT2","Right Out 2",
+        "Right Out 2","Right Mixer",
+        "Left Mixer","Left DAC",
+        "Right Mixer","Right DAC",
+        "Left ADC","Left ADC Mux",
+        "Left ADC Mux","Left PGA Mux",
+        "Left PGA Mux","Differential Mux",
+        "Differential Mux", "LINPUT2";
+
     cpu_dai_master: simple-audio-card,cpu {
         sound-dai = <&i2s_cpu_master>;
-        system-clock-frequency = <1562500>;
+        //system-clock-frequency = <2457600>;
         system-clock-direction-out;
     };
     codec_dai_master: simple-audio-card,codec {
-        sound-dai = <&codec_tlv320aic3104>;
-        system-clock-frequency = <1562500>;
+        sound-dai = <&es8388>;
+        //system-clock-frequency = <2457600>;
     };
 };
-
+/*
 &audio_card_slave_tx {
     simple-audio-card,bitclock-master = <&codec_dai_tx>;
     simple-audio-card,frame-master = <&codec_dai_tx>;
@@ -263,7 +324,7 @@
         system-clock-frequency = <12288000>;
     };
 };
-
+*/
 / {
     sensor_clk: sensor_clk {
         compatible = "fixed-clock";
@@ -299,20 +360,29 @@
         drive-strength = <2>;
     };
 
-    pinctrl_i2c2: i2c2 {
-        function = "i2c2";
-        groups = "i2c2_0_grp";
-    };
+//     pinctrl_i2c2: i2c2 {
+//         function = "i2c2";
+//         groups = "i2c2_0_grp";
+//     };
 
+    pinctrl_i2c3: i2c3 {
+        function = "i2c3";
+        groups = "i2c3_0_grp";
+    };
+    /*
     pinctrl_usb_overcurrent_n_in: pinctrl_usb_overcurrent_n_in {
+	status = "disabled";
         function = "usb_overcurrent_in";
         groups = "usb_overcurrent_in_grp";
     };
+    
 
     pinctrl_usb_drive_vbus_out: pinctrl_usb_drive_vbus_out {
+	status = "disabled";
         function = "usb_drive_vbus_out";
         groups = "usb_drive_vbus_out_2_grp";
     };
+    */
 
     pinctrl_gpio21: gpio21 {
         function = "gpio";
@@ -327,11 +397,11 @@
 
 #define GPIO_LINE_NAMES \
     "gpio_in_out_0",            "gpio_in_out_1",            "DSI_RST",                  "gpio_in_out_3", \
-    "cam0_reset_n",             "cam1_reset_n",             "i2c2_sda_in_out",          "i2c2_scl_out", \
-    "gpio_in_out_8",            "sdio0_gp_in",              "sdio0_cd_in",              "usb_overcurrent_n_in", \
-    "usb_drive_vbus_out",       "sdio1_gp_in",              "sdio1_cd_in_n",            "PCIe_mperst_out", \
+    "gpio_in_out_4",             "cam1_reset_n",             "gpio_in_out_6",          "gpio_in_out_7", \
+    "gpio_in_out_8",            "gpio_in_out_9",              "cam0_reset_n",              "gpio_in_out_11", \
+    "gpio_in_out_12",       "gpio_in_out_13",              "gpio_in_out_14",            "gpio_in_out_15", \
     \
-    "gpio_in_out_16",           "sdcard_vdd_sel",           "timer_ext_in0",             "timer_ext_in1", \
+    "gpio_in_out_16",           "gpio_in_out_17",           "timer_ext_in0",             "timer_ext_in1", \
     "shut_down_out",            "user_LED",                 "gpio_in_out_22",            "gpio_in_out_23", \
     "i2c2_current_src_en_out",  "i2c0_current_src_en_out",  "i2c1_current_src_en_out",   "pwm_0", \
     "pwm_1",                    "DSI_INTR",                 "uart0_cts_pad_in",          "uart0_rts_pad_out"
@@ -362,6 +432,7 @@
     lanes-config = <PCI_PHY_LINK_LANES_CFG__2x1_PLUS_1x2__MASTER_LANES_LN0_LN2_LN3>;
 };
 
+
 &cdns_torrent_phy {
     torrent_phy_pcie: phy@0 {
         reg = <0>;
@@ -389,5 +460,6 @@
     phys = <&torrent_phy_usb3>;
     phy-names = "cdns3,usb3-phy";
     pinctrl-names = "default";
-    pinctrl-0 = <&pinctrl_usb_overcurrent_n_in>, <&pinctrl_usb_drive_vbus_out>;
+    /*pinctrl-0 = <&pinctrl_usb_overcurrent_n_in>, <&pinctrl_usb_drive_vbus_out>;*/
+    /*pinctrl-0 = <&pinctrl_usb_drive_vbus_out>;*/
 };

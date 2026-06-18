@@ -21,5 +21,5 @@
             <GIC_SPI HW_INTERRUPTS__ETHERNET_15_IRQ IRQ_TYPE_LEVEL_HIGH>;
         clocks = <&scmi_clk HAILO15_SCMI_CLOCK_IDX_ETHERNET_PCLK>, <&scmi_clk HAILO15_SCMI_CLOCK_IDX_ETHERNET_ACLK>;
         clock-names = "pclk", "hclk";
-        phy-mode = "rgmii-id";
+        phy-mode = "rmii";
     };

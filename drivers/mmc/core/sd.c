@@ -1830,7 +1830,12 @@ int mmc_attach_sd(struct mmc_host *host)
 
 		err = mmc_spi_read_ocr(host, 0, &ocr);
 		if (err)
+		{
+
+			pr_err("%s: error %d whilist mmc_spi_read_ocr SD card\n",
+					mmc_hostname(host), err);
 			goto err;
+		}
 	}
 
 	/*
@@ -1854,7 +1859,12 @@ int mmc_attach_sd(struct mmc_host *host)
 	 */
 	err = mmc_sd_init_card(host, rocr, NULL);
 	if (err)
-		goto err;
+	{
+	
+	 pr_err("%s: error %d whilst mmc_sd_init_card SD card\n",
+		mmc_hostname(host), err);
+	   goto err;
+	}
 
 	mmc_release_host(host);
 	err = mmc_add_card(host->card);
