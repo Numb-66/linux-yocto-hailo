@@ -201,22 +201,20 @@
 
 &sdio0 {
     status = "okay";
-    sdhci-caps = <0 0x01000000>;
     bus-width = <4>;
-    max-frequency = <25000000>;
-    sd-vsel-gpio = <&gpio1 1 GPIO_ACTIVE_HIGH>; /* RESTORE: drives sdcard_vdd_sel */
-    sd-vsel-polarity-high;                      /* RESTORE */
-    //cd-gpios = <&gpio0 15 GPIO_ACTIVE_LOW>;
     broken-cd;
+    sd-vsel-gpio = <&gpio1 1 GPIO_ACTIVE_HIGH>;
+    sd-vsel-polarity-high;
     no-1-8-v;
-    phy-config {
+    max-frequency = <50000000>;       /* SD high-speed, like U-Boot */
+    phy-config {                       /* REVERTED to original known-good */
         card-is-emmc = <0x0>;
-        cmd-pad-values = <0x1 0x3 0x1 0x1>; // txslew_ctrl_n, txslew_ctrl_p, weakpull_enable, rxsel
-            dat-pad-values = <0x1 0x3 0x1 0x1>; // txslew_ctrl_n, txslew_ctrl_p, weakpull_enable, rxsel
-            rst-pad-values = <0x1 0x3 0x1 0x1>; // txslew_ctrl_n, txslew_ctrl_p, weakpull_enable, rxsel
-            clk-pad-values = <0x1 0x3 0x0 0x1>; // txslew_ctrl_n, txslew_ctrl_p, weakpull_enable, rxsel
-            sdclkdl-cnfg = <0x1 0x2F>; //extdly_en, cckdl_dc
-            drive-strength = <0x9 0x8>; //pad_sp, pad_sn
+        cmd-pad-values = <0x1 0x3 0x1 0x1>;
+        dat-pad-values = <0x1 0x3 0x1 0x1>;
+        rst-pad-values = <0x1 0x3 0x1 0x1>;
+        clk-pad-values = <0x1 0x3 0x0 0x1>;
+        sdclkdl-cnfg = <0x1 0x13>;     /* was 0x2F in wn */
+        drive-strength = <0x8 0x4>;    /* was 0x9 0x8 in wn */
     };
 };
 &sdio1 {
