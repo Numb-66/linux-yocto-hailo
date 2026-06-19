@@ -204,8 +204,8 @@
     sdhci-caps = <0 0x01000000>;
     bus-width = <4>;
     max-frequency = <25000000>;
-    //sd-vsel-gpio = <&gpio1 1 GPIO_ACTIVE_HIGH>;
-    //sd-vsel-polarity-high;
+    sd-vsel-gpio = <&gpio1 1 GPIO_ACTIVE_HIGH>; /* RESTORE: drives sdcard_vdd_sel */
+    sd-vsel-polarity-high;                      /* RESTORE */
     //cd-gpios = <&gpio0 15 GPIO_ACTIVE_LOW>;
     broken-cd;
     no-1-8-v;
