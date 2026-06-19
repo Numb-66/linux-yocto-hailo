@@ -149,8 +149,9 @@
         compatible = "everest,es8388";
         reg = <0x11>;
         #sound-dai-cells = <0>;
-        //clocks = <&i2s_cpu_master>;
-        //clock-names = "mclk";
+        /* MCLK from on-board 12.288MHz oscillator X3 (not from SoC) */
+        clocks = <&es8388_mclk>;
+        clock-names = "mclk";
         AVDD-supply = <&regulator_3p3v>;
         DVDD-supply = <&regulator_1p8v>;
     };
@@ -328,6 +329,12 @@
         compatible = "fixed-clock";
         #clock-cells = <0>;
         clock-frequency = <24000000>;
+    };
+
+    es8388_mclk: es8388_mclk {
+        compatible = "fixed-clock";
+        #clock-cells = <0>;
+        clock-frequency = <12288000>;
     };
 };
 
