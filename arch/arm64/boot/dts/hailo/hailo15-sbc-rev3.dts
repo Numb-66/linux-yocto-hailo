@@ -206,8 +206,8 @@
     max-frequency = <25000000>;
     //sd-vsel-gpio = <&gpio1 1 GPIO_ACTIVE_HIGH>;
     //sd-vsel-polarity-high;
-    cd-gpios = <&gpio0 15 GPIO_ACTIVE_LOW>;
-    //broken-cd;
+    //cd-gpios = <&gpio0 15 GPIO_ACTIVE_LOW>;
+    broken-cd;
     no-1-8-v;
     phy-config {
         card-is-emmc = <0x0>;
