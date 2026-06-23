@@ -7,6 +7,7 @@
  *  Copyright (C) 2005-2007 Pierre Ossman, All Rights Reserved.
  */
 
+#define DEBUG
 #include <linux/err.h>
 #include <linux/sizes.h>
 #include <linux/slab.h>
