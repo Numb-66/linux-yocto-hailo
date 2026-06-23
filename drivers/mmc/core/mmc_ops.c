@@ -5,7 +5,6 @@
  *  Copyright 2006-2007 Pierre Ossman
  */
 
-#define DEBUG
 #include <linux/slab.h>
 #include <linux/export.h>
 #include <linux/types.h>

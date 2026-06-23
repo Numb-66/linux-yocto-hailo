@@ -8,7 +8,6 @@
  *  MMCv4 support Copyright (C) 2006 Philip Langdale, All Rights Reserved.
  */
 
-#define DEBUG
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/interrupt.h>
