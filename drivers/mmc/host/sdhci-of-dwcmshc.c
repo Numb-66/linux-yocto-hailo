@@ -432,10 +432,18 @@ static void dwcmshc_hailo15_set_clock(struct sdhci_host *host, unsigned int cloc
 static int dwcmshc_hailo15_get_phy_config_from_dts(struct device *dev, struct hailo_priv *hailo_priv)
 {
 	struct device_node *phy_config_node;
-	phy_config_node = of_find_node_by_name(dev->of_node, "phy-config");
+	/*
+	 * Use of_get_child_by_name(), NOT of_find_node_by_name(): the latter does
+	 * of_node_put() on its 'from' arg (dev->of_node) every call, underflowing
+	 * the controller node's refcount across unbind/bind and eventually calling
+	 * a sleeping put under devtree_lock (BUG: sleeping in invalid context).
+	 * of_get_child_by_name() searches only direct children and leaves the
+	 * parent refcount untouched; the of_node_put() below balances the child.
+	 */
+	phy_config_node = of_get_child_by_name(dev->of_node, "phy-config");
 	if (!phy_config_node){
 		dev_err(dev, "%s: No phy configuration property found.\n", __func__);
-		return EINVAL;
+		return -EINVAL;
 	}
 	
 	of_property_read_u32(phy_config_node, "card-is-emmc", &hailo_priv->sdio_phy_config.card_is_emmc);
