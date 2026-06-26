@@ -2286,6 +2286,37 @@ int mmc_attach_mmc(struct mmc_host *host)
 	 * Detect and init the card.
 	 */
 	err = mmc_init_card(host, rocr, NULL);
+
+	/*
+	 * Availability protection for marginal eMMC signal integrity:
+	 * HS200/HS400 init can fail intermittently (e.g. -110 timeout during
+	 * or after the speed switch). For a rootfs eMMC that would leave the
+	 * card undetected and hang the boot forever in rootwait. So:
+	 *   1) retry once at the same speed (covers a transient glitch), then
+	 *   2) fall back to High Speed (<=52MHz) by masking the HS200/HS400
+	 *      host caps, so the system still boots - just slower.
+	 * host->card is only set on success, so a failed attempt leaves no
+	 * dangling card; mmc_init_card() re-runs full identification each call.
+	 */
+	if (err) {
+		pr_warn("%s: card init failed (%d), power-cycling and retrying\n",
+			mmc_hostname(host), err);
+		mmc_power_cycle(host, rocr);
+		err = mmc_init_card(host, rocr, NULL);
+	}
+	if (err && (host->caps2 & (MMC_CAP2_HS200 | MMC_CAP2_HS400 |
+				   MMC_CAP2_HS400_ES))) {
+		u32 saved_caps2 = host->caps2;
+
+		pr_warn("%s: HS200/HS400 init still failing (%d), falling back to High Speed\n",
+			mmc_hostname(host), err);
+		host->caps2 &= ~(MMC_CAP2_HS200 | MMC_CAP2_HS400 |
+				 MMC_CAP2_HS400_ES);
+		mmc_power_cycle(host, rocr);
+		err = mmc_init_card(host, rocr, NULL);
+		/* Restore caps so a later full re-init can try HS200 again. */
+		host->caps2 = saved_caps2;
+	}
 	if (err)
 		goto err;
 
