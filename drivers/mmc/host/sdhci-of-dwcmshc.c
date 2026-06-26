@@ -551,9 +551,31 @@ static void dwcmshc_hailo15_get_sd_vsel_from_dts(struct device *dev, struct sdhc
 
 static void hailo15_dwcmshc_hw_reset(struct sdhci_host *host)
 {
+	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
+	struct dwcmshc_priv *dwc_priv = sdhci_pltfm_priv(pltfm_host);
+	struct hailo_priv *hailo_priv = dwc_priv->priv;
+	u32 reg32;
+
 	dwcmshc_hailo15_phy_config(host);
 	hailo15_dwcmshc_set_vdd_gpio(host, false);
 	hailo15_dwcmshc_set_rxsel(host, false);
+
+	/*
+	 * For eMMC, also pulse the device RST_n line. phy_config() only
+	 * re-inits the controller PHY; a card wedged by a failed HS200 switch
+	 * (e.g. -110 timeouts) needs a true device reset to recover. The DWC
+	 * MSHC drives RST_n via EMMC_CTRL_R (OE + active-low RST_N).
+	 */
+	if (hailo_priv->sdio_phy_config.card_is_emmc) {
+		reg32 = sdhci_readl(host, DWCMSHC_EMMC_CTRL_R);
+		reg32 |= DWCMSHC_EMMC_CTRL_R__EMMC_RST_N_OE;
+		reg32 &= ~DWCMSHC_EMMC_CTRL_R__EMMC_RST_N;	/* assert (low) */
+		sdhci_writel(host, reg32, DWCMSHC_EMMC_CTRL_R);
+		udelay(10);					/* JEDEC tRSTW >= 1us */
+		reg32 |= DWCMSHC_EMMC_CTRL_R__EMMC_RST_N;	/* de-assert (high) */
+		sdhci_writel(host, reg32, DWCMSHC_EMMC_CTRL_R);
+		usleep_range(300, 400);				/* wait for device ready */
+	}
 }
 
 static void hailo15_dwcmshc_voltage_switch(struct sdhci_host *host)

@@ -2299,9 +2299,11 @@ int mmc_attach_mmc(struct mmc_host *host)
 	 * dangling card; mmc_init_card() re-runs full identification each call.
 	 */
 	if (err) {
-		pr_warn("%s: card init failed (%d), power-cycling and retrying\n",
+		pr_warn("%s: card init failed (%d), resetting and retrying\n",
 			mmc_hostname(host), err);
 		mmc_power_cycle(host, rocr);
+		if ((host->caps & MMC_CAP_HW_RESET) && host->ops->hw_reset)
+			host->ops->hw_reset(host);
 		err = mmc_init_card(host, rocr, NULL);
 	}
 	if (err && (host->caps2 & (MMC_CAP2_HS200 | MMC_CAP2_HS400 |
@@ -2313,6 +2315,13 @@ int mmc_attach_mmc(struct mmc_host *host)
 		host->caps2 &= ~(MMC_CAP2_HS200 | MMC_CAP2_HS400 |
 				 MMC_CAP2_HS400_ES);
 		mmc_power_cycle(host, rocr);
+		/*
+		 * A controller power-register toggle does not reset a
+		 * fixed-supply eMMC; pulse the device RST_n (hw_reset) so the
+		 * card recovers from the wedged HS200 state before re-init.
+		 */
+		if ((host->caps & MMC_CAP_HW_RESET) && host->ops->hw_reset)
+			host->ops->hw_reset(host);
 		err = mmc_init_card(host, rocr, NULL);
 		/* Restore caps so a later full re-init can try HS200 again. */
 		host->caps2 = saved_caps2;
