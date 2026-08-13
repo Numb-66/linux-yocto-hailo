@@ -1133,7 +1133,13 @@ static u32 xhci_get_port_status(struct usb_hcd *hcd,
 		status |= USB_PORT_STAT_C_CONNECTION << 16;
 	if (raw_port_status & PORT_PEC)
 		status |= USB_PORT_STAT_C_ENABLE << 16;
-	if ((raw_port_status & PORT_OCC))
+	/*
+	 * Wasno H15 board: the USB over-current input is not wired (VBUS is
+	 * hardwired to 3V3, no OC sense), so the controller reports spurious
+	 * over-current which makes hub.c power the port off and USB devices
+	 * never enumerate.  Mask OC status/change reporting entirely.
+	 */
+	if (0 && (raw_port_status & PORT_OCC))
 		status |= USB_PORT_STAT_C_OVERCURRENT << 16;
 	if ((raw_port_status & PORT_RC))
 		status |= USB_PORT_STAT_C_RESET << 16;
@@ -1145,7 +1151,7 @@ static u32 xhci_get_port_status(struct usb_hcd *hcd,
 	}
 	if (raw_port_status & PORT_PE)
 		status |= USB_PORT_STAT_ENABLE;
-	if (raw_port_status & PORT_OC)
+	if (0 && (raw_port_status & PORT_OC))	/* Wasno: OC not wired, see above */
 		status |= USB_PORT_STAT_OVERCURRENT;
 	if (raw_port_status & PORT_RESET)
 		status |= USB_PORT_STAT_RESET;
