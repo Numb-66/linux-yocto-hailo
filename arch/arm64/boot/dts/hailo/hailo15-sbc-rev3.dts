@@ -151,6 +151,8 @@
         #sound-dai-cells = <0>;
         //clocks = <&i2s_cpu_master>;
         //clock-names = "mclk";
+        /* SPK_CTL_H: gated to playback by the codec driver (amp off when idle) */
+        spk-ctl-gpios = <&gpio0 11 GPIO_ACTIVE_HIGH>;
         AVDD-supply = <&regulator_3p3v>;
         DVDD-supply = <&regulator_1p8v>;
     };
@@ -203,8 +205,11 @@
     status = "okay";
     bus-width = <4>;
     broken-cd;
-    sd-vsel-gpio = <&gpio1 1 GPIO_ACTIVE_HIGH>;
-    sd-vsel-polarity-high;
+    /* Wasno: GPIO17 (gpio1 line 1) is ALM_IN2, NOT an SD vsel pin - the
+     * wasno SD path has no vsel circuit (TXB0104 based). Claiming it here
+     * makes the alarm input unusable. Keep commented out. */
+    //sd-vsel-gpio = <&gpio1 1 GPIO_ACTIVE_HIGH>;
+    //sd-vsel-polarity-high;
     no-1-8-v;
     max-frequency = <50000000>;       /* SD high-speed, like U-Boot */
     phy-config {                       /* REVERTED to original known-good */
@@ -258,10 +263,16 @@
 &i2s_cpu_master {
     status = "okay";
     rx-sample-pace-pattern-repetitions = <2>;
-    rx-sample-pace = <64 64 64>;
+    /* ES8388 @ 12.288MHz MCLK, codec-fs = 48000.
+     * I2S-fs = 48828.125 -> filler cadence = 58.9623 frames
+     * (mostly 59, one 58 every ~26). Measured from rec.wav:
+     * dominant interval 58 under old <64> pace = 58*64/63 = 58.92,
+     * cmp type prev-val (80% periodicity). Old <64 64 64> values
+     * were for TLV320AIC3104. */
+    rx-sample-pace = <59 59 59>;
     rx-sample-cmp-to = "prev-val";
     tx-sample-offset = <81>;
-    tx-sample-pace = <63>;
+    tx-sample-pace = <58>;
 };
 
 &audio_card_master {
@@ -458,8 +469,14 @@
 
 &cdns_usb3 {
     dr_mode = "host";
-    phys = <&torrent_phy_usb3>;
-    phy-names = "cdns3,usb3-phy";
+    /* Wasno board is USB 2.0 only (DM/DP wired, no SuperSpeed lanes;
+     * schematic-confirmed). Referencing the Torrent USB3 PHY makes probe
+     * fail with -110 ("Timeout waiting for CMN ready"), so run high-speed
+     * without a USB3 PHY. Over-current input is not wired either (VBUS is
+     * hardwired 3V3 via R47) - OC reporting is masked in xhci-hub.c. */
+    maximum-speed = "high-speed";
+    //phys = <&torrent_phy_usb3>;
+    //phy-names = "cdns3,usb3-phy";
     pinctrl-names = "default";
     /*pinctrl-0 = <&pinctrl_usb_overcurrent_n_in>, <&pinctrl_usb_drive_vbus_out>;*/
     /*pinctrl-0 = <&pinctrl_usb_drive_vbus_out>;*/
